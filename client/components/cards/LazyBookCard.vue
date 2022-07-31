@@ -249,11 +249,9 @@ export default {
     },
     displayTitle() {
       if (this.recentEpisode) return this.recentEpisode.title
-      if (this.collapsedSeries) return this.collapsedSeries.name
-      if (this.orderBy === 'media.metadata.title' && this.sortingIgnorePrefix) {
-        return this.mediaMetadata.titleIgnorePrefix
-      }
-      return this.title
+      const ignorePrefix = this.orderBy === 'media.metadata.title' && this.sortingIgnorePrefix
+      if (this.collapsedSeries) return ignorePrefix ? this.collapsedSeries.nameIgnorePrefix : this.collapsedSeries.name
+      return ignorePrefix ? this.mediaMetadata.titleIgnorePrefix : this.title
     },
     displayLineTwo() {
       if (this.recentEpisode) return this.title
@@ -502,7 +500,21 @@ export default {
       }
       this.$emit('edit', this.libraryItem)
     },
-    toggleFinished() {
+    toggleFinished(confirmed = false) {
+      if (!this.itemIsFinished && this.userProgressPercent > 0 && !confirmed) {
+        const payload = {
+          message: `Are you sure you want to mark "${this.displayTitle}" as finished?`,
+          callback: (confirmed) => {
+            if (confirmed) {
+              this.toggleFinished(true)
+            }
+          },
+          type: 'yesNo'
+        }
+        this.store.commit('globals/setConfirmPrompt', payload)
+        return
+      }
+
       var updatePayload = {
         isFinished: !this.itemIsFinished
       }

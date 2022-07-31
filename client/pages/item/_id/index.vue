@@ -424,13 +424,21 @@ export default {
     },
     selectBookmark(bookmark) {
       if (!bookmark) return
-      console.log('Select bookmark', bookmark)
       if (this.isStreaming) {
         this.$eventBus.$emit('playback-seek', bookmark.time)
       } else if (this.streamLibraryItem) {
-        if (confirm(`Are you sure you want to play ${this.title} @ ${this.$secondsToTimestamp(bookmark.time)}?`)) {
-          this.startStream(bookmark.time)
+        this.showBookmarksModal = false
+        console.log('Already streaming library item so ask about it')
+        const payload = {
+          message: `Start playback for "${this.title}" at ${this.$secondsToTimestamp(bookmark.time)}?`,
+          callback: (confirmed) => {
+            if (confirmed) {
+              this.startStream(bookmark.time)
+            }
+          },
+          type: 'yesNo'
         }
+        this.$store.commit('globals/setConfirmPrompt', payload)
       } else {
         this.startStream(bookmark.time)
       }
@@ -480,7 +488,21 @@ export default {
     openEbook() {
       this.$store.commit('showEReader', this.libraryItem)
     },
-    toggleFinished() {
+    toggleFinished(confirmed = false) {
+      if (!this.userIsFinished && this.progressPercent > 0 && !confirmed) {
+        const payload = {
+          message: `Are you sure you want to mark "${this.title}" as finished?`,
+          callback: (confirmed) => {
+            if (confirmed) {
+              this.toggleFinished(true)
+            }
+          },
+          type: 'yesNo'
+        }
+        this.$store.commit('globals/setConfirmPrompt', payload)
+        return
+      }
+
       var updatePayload = {
         isFinished: !this.userIsFinished
       }

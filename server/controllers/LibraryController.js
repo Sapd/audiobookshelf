@@ -190,7 +190,7 @@ class LibraryController {
             // When collapsing by series and sorting by title use the series name instead of the book title
             if (payload.mediaType === 'book' && payload.collapseseries && li.media.metadata.seriesName) {
               if (sortByTitle) {
-                return li.media.metadata.seriesName
+                return this.db.serverSettings.sortingIgnorePrefix ? li.media.metadata.seriesNameIgnorePrefix : li.media.metadata.seriesName
               } else {
                 // When not sorting by title always show the collapsed series at the end
                 return direction === 'desc' ? -1 : 'zzzz'
@@ -273,7 +273,7 @@ class LibraryController {
 
     var series = libraryHelpers.getSeriesFromBooks(libraryItems, payload.minified)
     series = sort(series).asc(s => {
-      return s.name
+      return this.db.serverSettings.sortingIgnorePrefix ? s.nameIgnorePrefix : s.name
     })
     payload.total = series.length
 

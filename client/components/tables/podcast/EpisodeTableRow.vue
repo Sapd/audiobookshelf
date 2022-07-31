@@ -78,7 +78,7 @@ export default {
       return this.$secondsToTimestamp(this.episode.duration)
     },
     isStreaming() {
-      return this.$store.getters['getIsEpisodeStreaming'](this.libraryItemId, this.episode.id)
+      return this.$store.getters['getIsMediaStreaming'](this.libraryItemId, this.episode.id)
     },
     streamIsPlaying() {
       return this.$store.state.streamIsPlaying && this.isStreaming
@@ -124,7 +124,21 @@ export default {
         })
       }
     },
-    toggleFinished() {
+    toggleFinished(confirmed = false) {
+      if (!this.userIsFinished && this.itemProgressPercent > 0 && !confirmed) {
+        const payload = {
+          message: `Are you sure you want to mark "${this.title}" as finished?`,
+          callback: (confirmed) => {
+            if (confirmed) {
+              this.toggleFinished(true)
+            }
+          },
+          type: 'yesNo'
+        }
+        this.$store.commit('globals/setConfirmPrompt', payload)
+        return
+      }
+
       var updatePayload = {
         isFinished: !this.userIsFinished
       }
