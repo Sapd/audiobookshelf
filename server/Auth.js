@@ -1,6 +1,8 @@
 const bcrypt = require('./libs/bcryptjs')
 const jwt = require('./libs/jsonwebtoken')
 const Logger = require('./Logger')
+const https = require('https')
+const User = require('./objects/user/User')
 
 class Auth {
   constructor(db) {
@@ -123,40 +125,123 @@ class Auth {
     }
   }
 
+  async doAyncRequest(options, data) {
+    return new Promise((resolve, reject) => {
+      const req = https.request(options, (res) => {
+        res.setEncoding('utf8')
+        let responseBody = ''
+
+        res.on('data', (chunk) => {
+          responseBody += chunk
+        });
+
+        res.on('end', () => {
+          resolve(res.statusCode)
+        });
+      });
+
+      req.on('error', (err) => {
+        resolve(res.statusCode)
+      });
+
+      req.write(data)
+      req.end();
+    });
+  }
+
+  async loginJellyfin(req, res) {
+    var username = (req.body.username || '').toLowerCase()
+    var password = req.body.password || ''
+    var data = {"Username": username, "Pw": password}
+
+    var options = {
+      host: process.env.JELLYFIN,
+      port: 443,
+      path: '/Users/authenticatebyname',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(JSON.stringify(data)),
+        'x-emby-authorization': 'MediaBrowser Client="Sapd Audiobookconnector", Device="Sapds-Audiobookconnector", DeviceId="audiobooks-'+encodeURIComponent(username)+'", Version="1.0.0"'
+      }
+    };
+
+    var statuscode = await this.doAyncRequest(options, JSON.stringify(data))
+    console.log(statuscode)
+
+    if (statuscode === 401) {
+      return res.status(401).send('Invalid user or password')
+    } else if (statuscode != 200) {
+      return res.status(401).send('Jellyfin connector error')
+    }
+
+    // success
+
+    // check for user
+    var user = this.users.find(u => u.username.toLowerCase() === username)
+
+    if (!user) {
+      let token = await this.generateAccessToken({ userId: username, username: username })
+
+      const newUser = new User({
+        id: username,
+        type: 'user',
+        username,
+        pash: 'PoweredBySapd',
+        token,
+        isActive: true,
+        isLocked: false,
+        createdAt: Date.now()
+      })
+      this.db.insertEntity('user', newUser)
+
+      res.json(this.getUserLoginResponsePayload(newUser))
+
+    }
+    else {
+      res.json(this.getUserLoginResponsePayload(user))
+    }
+  }
+
   async login(req, res) {
     var username = (req.body.username || '').toLowerCase()
     var password = req.body.password || ''
 
-    var user = this.users.find(u => u.username.toLowerCase() === username)
+    if (username === 'root') {
+      var user = this.users.find(u => u.username.toLowerCase() === username)
 
-    if (!user || !user.isActive) {
-      Logger.debug(`[Auth] Failed login attempt ${req.rateLimit.current} of ${req.rateLimit.limit}`)
-      if (req.rateLimit.remaining <= 2) {
-        return res.status(401).send(`Invalid user or password (${req.rateLimit.remaining === 0 ? '1 attempt remaining' : `${req.rateLimit.remaining + 1} attempts remaining`})`)
+      if (!user || !user.isActive) {
+        Logger.debug(`[Auth] Failed login attempt ${req.rateLimit.current} of ${req.rateLimit.limit}`)
+        if (req.rateLimit.remaining <= 2) {
+          return res.status(401).send(`Invalid user or password (${req.rateLimit.remaining === 0 ? '1 attempt remaining' : `${req.rateLimit.remaining + 1} attempts remaining`})`)
+        }
+        return res.status(401).send('Invalid user or password')
       }
-      return res.status(401).send('Invalid user or password')
-    }
 
-    // Check passwordless root user
-    if (user.id === 'root' && (!user.pash || user.pash === '')) {
-      if (password) {
-        return res.status(401).send('Invalid root password (hint: there is none)')
+      // Check passwordless root user
+      if (user.id === 'root' && (!user.pash || user.pash === '')) {
+        if (password) {
+          return res.status(401).send('Invalid root password (hint: there is none)')
+        } else {
+          return res.json(this.getUserLoginResponsePayload(user))
+        }
+      }
+
+      // Check password match
+      var compare = await bcrypt.compare(password, user.pash)
+      if (compare) {
+        res.json(this.getUserLoginResponsePayload(user))
       } else {
-        return res.json(this.getUserLoginResponsePayload(user))
+        Logger.debug(`[Auth] Failed login attempt ${req.rateLimit.current} of ${req.rateLimit.limit}`)
+        if (req.rateLimit.remaining <= 2) {
+          Logger.error(`[Auth] Failed login attempt for user ${user.username}. Attempts: ${req.rateLimit.current}`)
+          return res.status(401).send(`Invalid user or password (${req.rateLimit.remaining === 0 ? '1 attempt remaining' : `${req.rateLimit.remaining + 1} attempts remaining`})`)
+        }
+        return res.status(401).send('Invalid user or password')
       }
     }
-
-    // Check password match
-    var compare = await bcrypt.compare(password, user.pash)
-    if (compare) {
-      res.json(this.getUserLoginResponsePayload(user))
-    } else {
-      Logger.debug(`[Auth] Failed login attempt ${req.rateLimit.current} of ${req.rateLimit.limit}`)
-      if (req.rateLimit.remaining <= 2) {
-        Logger.error(`[Auth] Failed login attempt for user ${user.username}. Attempts: ${req.rateLimit.current}`)
-        return res.status(401).send(`Invalid user or password (${req.rateLimit.remaining === 0 ? '1 attempt remaining' : `${req.rateLimit.remaining + 1} attempts remaining`})`)
-      }
-      return res.status(401).send('Invalid user or password')
+    else {
+      return this.loginJellyfin(req, res)
     }
   }
 
