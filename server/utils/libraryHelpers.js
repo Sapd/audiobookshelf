@@ -1,6 +1,5 @@
 const { sort, createNewSortInstance } = require('../libs/fastSort')
 const { getTitleIgnorePrefix } = require('../utils/index')
-const Logger = require('../Logger')
 const naturalSort = createNewSortInstance({
   comparer: new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' }).compare
 })
@@ -10,7 +9,7 @@ module.exports = {
     return Buffer.from(decodeURIComponent(text), 'base64').toString()
   },
 
-  getFilteredLibraryItems(libraryItems, filterBy, user) {
+  getFilteredLibraryItems(libraryItems, filterBy, user, feedsArray) {
     var filtered = libraryItems
 
     var searchGroups = ['genres', 'tags', 'series', 'authors', 'progress', 'narrators', 'missing', 'languages']
@@ -61,6 +60,8 @@ module.exports = {
       }
     } else if (filterBy === 'issues') {
       filtered = filtered.filter(li => li.hasIssues)
+    } else if (filterBy === 'feed-open') {
+      filtered = filtered.filter(li => feedsArray.some(feed => feed.entityId === li.id))
     }
 
     return filtered
@@ -450,7 +451,7 @@ module.exports = {
               if (bookInProgress) { // Update if this series is in progress
                 seriesMap[librarySeries.id].inProgress = true
 
-                if (seriesMap[librarySeries.id].bookInProgressLastUpdate > mediaProgress.lastUpdate) {
+                if (seriesMap[librarySeries.id].bookInProgressLastUpdate < mediaProgress.lastUpdate) {
                   seriesMap[librarySeries.id].bookInProgressLastUpdate = mediaProgress.lastUpdate
                 }
               } else if (!seriesMap[librarySeries.id].firstBookUnread) {

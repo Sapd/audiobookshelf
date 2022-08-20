@@ -10,6 +10,7 @@ const Author = require('./objects/entities/Author')
 const Series = require('./objects/entities/Series')
 const ServerSettings = require('./objects/settings/ServerSettings')
 const PlaybackSession = require('./objects/PlaybackSession')
+const Feed = require('./objects/Feed')
 
 class Db {
   constructor() {
@@ -120,7 +121,7 @@ class Db {
   async init() {
     await this.load()
 
-    if (!this.serverSettings) {
+    if (!this.serverSettings) { // Create first load server settings
       this.serverSettings = new ServerSettings()
       await this.insertEntity('settings', this.serverSettings)
     }
@@ -141,7 +142,7 @@ class Db {
       this.libraries.sort((a, b) => a.displayOrder - b.displayOrder)
       Logger.info(`[DB] ${this.libraries.length} Libraries Loaded`)
     })
-    var p4 = this.settingsDb.select(() => true).then((results) => {
+    var p4 = this.settingsDb.select(() => true).then(async (results) => {
       if (results.data && results.data.length) {
         this.settings = results.data
         var serverSettings = this.settings.find(s => s.id === 'server-settings')
@@ -151,6 +152,18 @@ class Db {
           // Check if server was upgraded
           if (!this.serverSettings.version || this.serverSettings.version !== version) {
             this.previousVersion = this.serverSettings.version || '1.0.0'
+
+            // Library settings and server settings updated in 2.1.3 - run migration
+            if (this.previousVersion.localeCompare('2.1.3') < 0) {
+              Logger.info(`[Db] Running servers & library settings migration`)
+              for (const library of this.libraries) {
+                if (library.settings.coverAspectRatio !== serverSettings.coverAspectRatio) {
+                  library.settings.coverAspectRatio = serverSettings.coverAspectRatio
+                  await this.updateEntity('library', library)
+                  Logger.debug(`[Db] Library ${library.name} migrated`)
+                }
+              }
+            }
           }
         }
       }
@@ -181,17 +194,6 @@ class Db {
   }
   getLibraryItemsInLibrary(libraryId) {
     return this.libraryItems.filter(li => li.libraryId === libraryId)
-  }
-  getPlaybackSession(id) {
-    return this.sessionsDb.select((pb) => pb.id == id).then((results) => {
-      if (results.data.length) {
-        return new PlaybackSession(results.data[0])
-      }
-      return null
-    }).catch((error) => {
-      Logger.error('Failed to get session', error)
-      return null
-    })
   }
 
   async updateLibraryItem(libraryItem) {
@@ -367,22 +369,7 @@ class Db {
     }
 
     return entityDb.update((record) => record.id === entity.id, () => jsonEntity).then((results) => {
-      if (process.env.NODE_ENV !== 'production') {
-        Logger.debug(`[DB] Updated ${entityName}: ${results.updated} | Selected: ${results.selected}`)
-
-        if (!results.selected) {
-          entityDb.select(match => match.id == jsonEntity.id).then((results) => {
-            if (results.data.length) {
-              console.log('Said selected 0 but found it right here...', results.data[0].id)
-            } else {
-              console.log('Said selected 0 and no results for json entity id', jsonEntity.id)
-            }
-          })
-        }
-      } else {
-        Logger.debug(`[DB] Updated ${entityName}: ${results.updated}`)
-      }
-
+      Logger.debug(`[DB] Updated ${entityName}: ${results.updated}`)
       var arrayKey = this.getEntityArrayKey(entityName)
       if (this[arrayKey]) {
         this[arrayKey] = this[arrayKey].map(e => {
@@ -448,6 +435,18 @@ class Db {
     }).catch((error) => {
       Logger.error('[Db] Failed to select sessions', error)
       return []
+    })
+  }
+
+  getPlaybackSession(id) {
+    return this.sessionsDb.select((pb) => pb.id == id).then((results) => {
+      if (results.data.length) {
+        return new PlaybackSession(results.data[0])
+      }
+      return null
+    }).catch((error) => {
+      Logger.error('Failed to get session', error)
+      return null
     })
   }
 
