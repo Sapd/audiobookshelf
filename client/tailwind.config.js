@@ -15,7 +15,10 @@ module.exports = {
       'py-1.5',
       'bg-info',
       'px-1.5',
-      'min-w-5'
+      'min-w-5',
+      'w-3.5',
+      'h-3.5',
+      'border-warning'
     ],
   },
   theme: {
@@ -44,6 +47,7 @@ module.exports = {
       minWidth: {
         '5': '1.25rem',
         '6': '1.5rem',
+        '8': '2rem',
         '10': '2.5rem',
         '12': '3rem',
         '16': '4rem',
