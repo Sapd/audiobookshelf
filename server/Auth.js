@@ -201,7 +201,7 @@ class Auth {
       return false
     }
 
-    let user = this.users.find(u => u.username.toLowerCase() === username)
+    let user = this.users.find(u => u.username.toLowerCase() === username.toLowerCase())
 
     // If the user doesn't exist and PROXY_FORWARD AUTH_CREATE is enabled, create the user
     if (!user && global.ForwardAuth.CreateUser) {
