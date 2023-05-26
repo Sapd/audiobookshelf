@@ -256,7 +256,7 @@ class Auth {
     }
 
     // Mismatch username in header with username from token
-    if (req.user.username.toLowerCase() !== username) {
+    if (req.user.username.toLowerCase() !== username.toLowerCase()) {
       Logger.error(`[Auth] validate: Forward Auth username "${username}" from header ${global.ForwardAuth.UsernameHeader} does not match username "${req.user.username.toLowerCase()}" from token`)
       return false
     }
