@@ -2,7 +2,7 @@
   <modals-modal v-model="show" name="edit-author" :width="800" :height="'unset'" :processing="processing">
     <template #outer>
       <div class="absolute top-0 left-0 p-5 w-2/3 overflow-hidden">
-        <p class="font-book text-3xl text-white truncate">{{ title }}</p>
+        <p class="text-3xl text-white truncate">{{ title }}</p>
       </div>
     </template>
     <div class="p-4 w-full text-sm py-6 rounded-lg bg-bg shadow-lg border border-black-300 relative overflow-hidden" style="min-height: 400px; max-height: 80vh">
@@ -85,6 +85,12 @@ export default {
     },
     title() {
       return this.$strings.HeaderUpdateAuthor
+    },
+    currentLibraryId() {
+      return this.$store.state.libraries.currentLibraryId
+    },
+    libraryProvider() {
+      return this.$store.getters['libraries/getLibraryProvider'](this.currentLibraryId) || 'google'
     }
   },
   methods: {
@@ -109,7 +115,8 @@ export default {
       this.processing = true
       var result = await this.$axios.$patch(`/api/authors/${this.authorId}`, updatePayload).catch((error) => {
         console.error('Failed', error)
-        this.$toast.error(this.$strings.ToastAuthorUpdateFailed)
+        const errorMsg = error.response ? error.response.data : null
+        this.$toast.error(errorMsg || this.$strings.ToastAuthorUpdateFailed)
         return null
       })
       if (result) {
@@ -125,8 +132,7 @@ export default {
     },
     async removeCover() {
       var updatePayload = {
-        imagePath: null,
-        relImagePath: null
+        imagePath: null
       }
       this.processing = true
       var result = await this.$axios.$patch(`/api/authors/${this.authorId}`, updatePayload).catch((error) => {
@@ -151,6 +157,11 @@ export default {
       if (this.authorCopy.asin) payload.asin = this.authorCopy.asin
       else payload.q = this.authorCopy.name
 
+      payload.region = 'us'
+      if (this.libraryProvider.startsWith('audible.')) {
+        payload.region = this.libraryProvider.split('.').pop() || 'us'
+      }
+
       var response = await this.$axios.$post(`/api/authors/${this.authorId}/match`, payload).catch((error) => {
         console.error('Failed', error)
         return null
@@ -161,8 +172,7 @@ export default {
         if (response.author.imagePath) {
           this.$toast.success(this.$strings.ToastAuthorUpdateSuccess)
           this.$store.commit('globals/showEditAuthorModal', response.author)
-        }
-        else this.$toast.success(this.$strings.ToastAuthorUpdateSuccessNoImageFound)
+        } else this.$toast.success(this.$strings.ToastAuthorUpdateSuccessNoImageFound)
       } else {
         this.$toast.info('No updates were made for Author')
       }

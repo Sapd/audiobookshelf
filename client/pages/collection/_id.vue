@@ -19,6 +19,11 @@
               {{ streaming ? $strings.ButtonPlaying : $strings.ButtonPlay }}
             </ui-btn>
 
+            <!-- RSS feed -->
+            <ui-tooltip v-if="rssFeed" :text="$strings.LabelOpenRSSFeed" direction="top">
+              <ui-icon-btn icon="rss_feed" class="mx-0.5" :bg-color="rssFeed ? 'success' : 'primary'" outlined @click="showRSSFeedModal" />
+            </ui-tooltip>
+
             <button type="button" class="h-9 w-9 flex items-center justify-center shadow-sm pl-3 pr-3 text-left focus:outline-none cursor-pointer text-gray-100 hover:text-gray-200 rounded-full hover:bg-white/5 mx-px" @click.stop.prevent="editClick">
               <span class="material-icons text-xl">edit</span>
             </button>
@@ -46,7 +51,7 @@ export default {
     if (!store.state.user.user) {
       return redirect(`/login?redirect=${route.path}`)
     }
-    var collection = await app.$axios.$get(`/api/collections/${params.id}`).catch((error) => {
+    const collection = await app.$axios.$get(`/api/collections/${params.id}?include=rssfeed`).catch((error) => {
       console.error('Failed', error)
       return false
     })
@@ -61,7 +66,8 @@ export default {
 
     store.commit('libraries/addUpdateCollection', collection)
     return {
-      collectionId: collection.id
+      collectionId: collection.id,
+      rssFeed: collection.rssFeed || null
     }
   },
   data() {
@@ -99,6 +105,9 @@ export default {
     showPlayButton() {
       return this.playableBooks.length
     },
+    userIsAdminOrUp() {
+      return this.$store.getters['user/getIsAdminOrUp']
+    },
     userCanUpdate() {
       return this.$store.getters['user/getUserCanUpdate']
     },
@@ -112,6 +121,12 @@ export default {
           action: 'create-playlist'
         }
       ]
+      if (this.userIsAdminOrUp || this.rssFeed) {
+        items.push({
+          text: this.$strings.LabelOpenRSSFeed,
+          action: 'open-rss-feed'
+        })
+      }
       if (this.userCanDelete) {
         items.push({
           text: this.$strings.ButtonDelete,
@@ -122,11 +137,21 @@ export default {
     }
   },
   methods: {
+    showRSSFeedModal() {
+      this.$store.commit('globals/setRSSFeedOpenCloseModal', {
+        id: this.collectionId,
+        name: this.collectionName,
+        type: 'collection',
+        feed: this.rssFeed
+      })
+    },
     contextMenuAction(action) {
       if (action === 'delete') {
         this.removeClick()
       } else if (action === 'create-playlist') {
         this.createPlaylistFromCollection()
+      } else if (action === 'open-rss-feed') {
+        this.showRSSFeedModal()
       }
     },
     createPlaylistFromCollection() {
@@ -206,9 +231,27 @@ export default {
           queueItems
         })
       }
+    },
+    rssFeedOpen(data) {
+      if (data.entityId === this.collectionId) {
+        console.log('RSS Feed Opened', data)
+        this.rssFeed = data
+      }
+    },
+    rssFeedClosed(data) {
+      if (data.entityId === this.collectionId) {
+        console.log('RSS Feed Closed', data)
+        this.rssFeed = null
+      }
     }
   },
-  mounted() {},
-  beforeDestroy() {}
+  mounted() {
+    this.$root.socket.on('rss_feed_open', this.rssFeedOpen)
+    this.$root.socket.on('rss_feed_closed', this.rssFeedClosed)
+  },
+  beforeDestroy() {
+    this.$root.socket.off('rss_feed_open', this.rssFeedOpen)
+    this.$root.socket.off('rss_feed_closed', this.rssFeedClosed)
+  }
 }
 </script>

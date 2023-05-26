@@ -16,17 +16,17 @@
       <nuxt-link v-if="isPodcastLibrary" :to="`/library/${currentLibraryId}/podcast/latest`" class="flex-grow h-full flex justify-center items-center" :class="isPodcastLatestPage ? 'bg-primary bg-opacity-80' : 'bg-primary bg-opacity-40'">
         <p class="text-sm">{{ $strings.ButtonLatest }}</p>
       </nuxt-link>
-      <nuxt-link v-if="!isPodcastLibrary" :to="`/library/${currentLibraryId}/bookshelf/series`" class="flex-grow h-full flex justify-center items-center" :class="isSeriesPage ? 'bg-primary bg-opacity-80' : 'bg-primary bg-opacity-40'">
+      <nuxt-link v-if="isBookLibrary" :to="`/library/${currentLibraryId}/bookshelf/series`" class="flex-grow h-full flex justify-center items-center" :class="isSeriesPage ? 'bg-primary bg-opacity-80' : 'bg-primary bg-opacity-40'">
         <p v-if="isSeriesPage" class="text-sm">{{ $strings.ButtonSeries }}</p>
         <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
         </svg>
       </nuxt-link>
-      <nuxt-link v-if="!isPodcastLibrary" :to="`/library/${currentLibraryId}/bookshelf/collections`" class="flex-grow h-full flex justify-center items-center" :class="isCollectionsPage ? 'bg-primary bg-opacity-80' : 'bg-primary bg-opacity-40'">
+      <nuxt-link v-if="isBookLibrary" :to="`/library/${currentLibraryId}/bookshelf/collections`" class="flex-grow h-full flex justify-center items-center" :class="isCollectionsPage ? 'bg-primary bg-opacity-80' : 'bg-primary bg-opacity-40'">
         <p v-if="isCollectionsPage" class="text-sm">{{ $strings.ButtonCollections }}</p>
         <span v-else class="material-icons-outlined text-lg">collections_bookmark</span>
       </nuxt-link>
-      <nuxt-link v-if="!isPodcastLibrary" :to="`/library/${currentLibraryId}/authors`" class="flex-grow h-full flex justify-center items-center" :class="isAuthorsPage ? 'bg-primary bg-opacity-80' : 'bg-primary bg-opacity-40'">
+      <nuxt-link v-if="isBookLibrary" :to="`/library/${currentLibraryId}/authors`" class="flex-grow h-full flex justify-center items-center" :class="isAuthorsPage ? 'bg-primary bg-opacity-80' : 'bg-primary bg-opacity-40'">
         <p v-if="isAuthorsPage" class="text-sm">{{ $strings.ButtonAuthors }}</p>
         <svg v-else class="w-5 h-5" viewBox="0 0 24 24">
           <path
@@ -42,7 +42,7 @@
     <div id="toolbar" class="absolute top-10 md:top-0 left-0 w-full h-10 md:h-full z-40 flex items-center justify-end md:justify-start px-2 md:px-8">
       <!-- Series books page -->
       <template v-if="selectedSeries">
-        <p class="pl-2 font-book text-base md:text-lg">
+        <p class="pl-2 text-base md:text-lg">
           {{ seriesName }}
         </p>
         <div class="w-6 h-6 rounded-full bg-black bg-opacity-30 flex items-center justify-center ml-3">
@@ -50,31 +50,36 @@
         </div>
         <div class="flex-grow" />
         <ui-checkbox v-if="!isBatchSelecting" v-model="settings.collapseBookSeries" :label="$strings.LabelCollapseSeries" checkbox-bg="bg" check-color="white" small class="mr-2" @input="updateCollapseBookSeries" />
-        <ui-btn v-if="!isBatchSelecting" color="primary" small :loading="processingSeries" class="items-center ml-1 sm:ml-4 hidden md:flex" @click="markSeriesFinished">
-          <div class="h-5 w-5">
-            <svg v-if="isSeriesFinished" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="rgb(63, 181, 68)">
-              <path d="M19 1H5c-1.1 0-1.99.9-1.99 2L3 15.93c0 .69.35 1.3.88 1.66L12 23l8.11-5.41c.53-.36.88-.97.88-1.66L21 3c0-1.1-.9-2-2-2zm-9 15l-5-5 1.41-1.41L10 13.17l7.59-7.59L19 7l-9 9z" />
-            </svg>
-            <svg v-else xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M19 1H5c-1.1 0-1.99.9-1.99 2L3 15.93c0 .69.35 1.3.88 1.66L12 23l8.11-5.41c.53-.36.88-.97.88-1.66L21 3c0-1.1-.9-2-2-2zm-7 19.6l-7-4.66V3h14v12.93l-7 4.67zm-2.01-7.42l-2.58-2.59L6 12l4 4 8-8-1.42-1.42z" />
-            </svg>
-          </div>
-          <span class="pl-2"> {{ $strings.LabelMarkSeries }} {{ isSeriesFinished ? $strings.LabelNotFinished : $strings.LabelFinished }}</span>
-        </ui-btn>
-        <ui-btn v-if="isSeriesRemovedFromContinueListening && !isBatchSelecting" small :loading="processingSeries" @click="reAddSeriesToContinueListening" class="hidden md:block ml-2"> Re-Add Series to Continue Listening </ui-btn>
+
+        <!-- RSS feed -->
+        <ui-tooltip v-if="seriesRssFeed" :text="$strings.LabelOpenRSSFeed" direction="top">
+          <ui-icon-btn icon="rss_feed" class="mx-0.5" :size="7" icon-font-size="1.2rem" bg-color="success" outlined @click="showOpenSeriesRSSFeed" />
+        </ui-tooltip>
+
+        <ui-context-menu-dropdown v-if="!isBatchSelecting && seriesContextMenuItems.length" :items="seriesContextMenuItems" class="mx-px" @action="seriesContextMenuAction" />
       </template>
       <!-- library & collections page -->
       <template v-else-if="page !== 'search' && page !== 'podcast-search' && page !== 'recent-episodes' && !isHome">
-        <p class="font-book hidden md:block">{{ numShowing }} {{ entityName }}</p>
+        <p class="hidden md:block">{{ numShowing }} {{ entityName }}</p>
 
         <div class="flex-grow hidden sm:inline-block" />
 
-        <ui-checkbox v-if="isLibraryPage && !isPodcastLibrary && !isBatchSelecting" v-model="settings.collapseSeries" :label="$strings.LabelCollapseSeries" checkbox-bg="bg" check-color="white" small class="mr-2" @input="updateCollapseSeries" />
+        <!-- collapse series checkbox -->
+        <ui-checkbox v-if="isLibraryPage && isBookLibrary && !isBatchSelecting" v-model="settings.collapseSeries" :label="$strings.LabelCollapseSeries" checkbox-bg="bg" check-color="white" small class="mr-2" @input="updateCollapseSeries" />
+
+        <!-- library filter select -->
         <controls-library-filter-select v-if="isLibraryPage && !isBatchSelecting" v-model="settings.filterBy" class="w-36 sm:w-44 md:w-48 h-7.5 ml-1 sm:ml-4" @change="updateFilter" />
+
+        <!-- library sort select -->
         <controls-library-sort-select v-if="isLibraryPage && !isBatchSelecting" v-model="settings.orderBy" :descending.sync="settings.orderDesc" class="w-36 sm:w-44 md:w-48 h-7.5 ml-1 sm:ml-4" @change="updateOrder" />
+
+        <!-- series filter select -->
         <controls-library-filter-select v-if="isSeriesPage && !isBatchSelecting" v-model="settings.seriesFilterBy" is-series class="w-36 sm:w-44 md:w-48 h-7.5 ml-1 sm:ml-4" @change="updateSeriesFilter" />
+
+        <!-- series sort select -->
         <controls-sort-select v-if="isSeriesPage && !isBatchSelecting" v-model="settings.seriesSortBy" :descending.sync="settings.seriesSortDesc" :items="seriesSortItems" class="w-36 sm:w-44 md:w-48 h-7.5 ml-1 sm:ml-4" @change="updateSeriesSort" />
 
+        <!-- issues page remove all button -->
         <ui-btn v-if="isIssuesFilter && userCanDelete && !isBatchSelecting" :loading="processingIssues" color="error" small class="ml-4" @click="removeAllIssues">{{ $strings.ButtonRemoveAll }} {{ numShowing }} {{ entityName }}</ui-btn>
       </template>
       <!-- search page -->
@@ -118,6 +123,32 @@ export default {
     }
   },
   computed: {
+    seriesContextMenuItems() {
+      if (!this.selectedSeries) return []
+
+      const items = [
+        {
+          text: this.isSeriesFinished ? this.$strings.MessageMarkAsNotFinished : this.$strings.MessageMarkAsFinished,
+          action: 'mark-series-finished'
+        }
+      ]
+
+      if (this.userIsAdminOrUp || this.selectedSeries.rssFeed) {
+        items.push({
+          text: this.$strings.LabelOpenRSSFeed,
+          action: 'open-rss-feed'
+        })
+      }
+
+      if (this.isSeriesRemovedFromContinueListening) {
+        items.push({
+          text: 'Re-Add Series to Continue Listening',
+          action: 're-add-to-continue-listening'
+        })
+      }
+
+      return items
+    },
     seriesSortItems() {
       return [
         {
@@ -131,6 +162,14 @@ export default {
         {
           text: this.$strings.LabelAddedAt,
           value: 'addedAt'
+        },
+        {
+          text: this.$strings.LabelLastBookAdded,
+          value: 'lastBookAdded'
+        },
+        {
+          text: this.$strings.LabelLastBookUpdated,
+          value: 'lastBookUpdated'
         },
         {
           text: this.$strings.LabelTotalDuration,
@@ -150,11 +189,20 @@ export default {
     currentLibraryId() {
       return this.$store.state.libraries.currentLibraryId
     },
+    libraryProvider() {
+      return this.$store.getters['libraries/getLibraryProvider'](this.currentLibraryId) || 'google'
+    },
     currentLibraryMediaType() {
       return this.$store.getters['libraries/getCurrentLibraryMediaType']
     },
+    isBookLibrary() {
+      return this.currentLibraryMediaType === 'book'
+    },
     isPodcastLibrary() {
       return this.currentLibraryMediaType === 'podcast'
+    },
+    isMusicLibrary() {
+      return this.currentLibraryMediaType === 'music'
     },
     isLibraryPage() {
       return this.page === ''
@@ -180,10 +228,16 @@ export default {
     isAuthorsPage() {
       return this.$route.name === 'library-library-authors'
     },
+    isAlbumsPage() {
+      return this.page === 'albums'
+    },
     numShowing() {
       return this.totalEntities
     },
     entityName() {
+      if (this.isAlbumsPage) return 'Albums'
+      if (this.isMusicLibrary) return 'Tracks'
+
       if (this.isPodcastLibrary) return this.$strings.LabelPodcasts
       if (!this.page) return this.$strings.LabelBooks
       if (this.isSeriesPage) return this.$strings.LabelSeries
@@ -199,6 +253,9 @@ export default {
     },
     seriesProgress() {
       return this.selectedSeries ? this.selectedSeries.progress : null
+    },
+    seriesRssFeed() {
+      return this.selectedSeries ? this.selectedSeries.rssFeed : null
     },
     seriesLibraryItemIds() {
       if (!this.seriesProgress) return []
@@ -222,6 +279,31 @@ export default {
     }
   },
   methods: {
+    seriesContextMenuAction(action) {
+      if (action === 'open-rss-feed') {
+        this.showOpenSeriesRSSFeed()
+      } else if (action === 're-add-to-continue-listening') {
+        if (this.processingSeries) {
+          console.warn('Already processing series')
+          return
+        }
+        this.reAddSeriesToContinueListening()
+      } else if (action === 'mark-series-finished') {
+        if (this.processingSeries) {
+          console.warn('Already processing series')
+          return
+        }
+        this.markSeriesFinished()
+      }
+    },
+    showOpenSeriesRSSFeed() {
+      this.$store.commit('globals/setRSSFeedOpenCloseModal', {
+        id: this.selectedSeries.id,
+        name: this.selectedSeries.name,
+        type: 'series',
+        feed: this.selectedSeries.rssFeed
+      })
+    },
     reAddSeriesToContinueListening() {
       this.processingSeries = true
       this.$axios
@@ -244,7 +326,11 @@ export default {
         const payload = {}
         if (author.asin) payload.asin = author.asin
         else payload.q = author.name
-        console.log('Payload', payload, 'author', author)
+
+        payload.region = 'us'
+        if (this.libraryProvider.startsWith('audible.')) {
+          payload.region = this.libraryProvider.split('.').pop() || 'us'
+        }
 
         this.$eventBus.$emit(`searching-author-${author.id}`, true)
 
@@ -286,27 +372,38 @@ export default {
       }
     },
     markSeriesFinished() {
-      var newIsFinished = !this.isSeriesFinished
-      this.processingSeries = true
-      var updateProgressPayloads = this.seriesLibraryItemIds.map((lid) => {
-        return {
-          libraryItemId: lid,
-          isFinished: newIsFinished
-        }
-      })
-      console.log('Progress payloads', updateProgressPayloads)
-      this.$axios
-        .patch(`/api/me/progress/batch/update`, updateProgressPayloads)
-        .then(() => {
-          this.$toast.success('Series update success')
-          this.selectedSeries.progress.isFinished = newIsFinished
-          this.processingSeries = false
-        })
-        .catch((error) => {
-          this.$toast.error('Series update failed')
-          console.error('Failed to batch update read/not read', error)
-          this.processingSeries = false
-        })
+      const newIsFinished = !this.isSeriesFinished
+
+      const payload = {
+        message: newIsFinished ? this.$strings.MessageConfirmMarkSeriesFinished : this.$strings.MessageConfirmMarkSeriesNotFinished,
+        callback: (confirmed) => {
+          if (confirmed) {
+            this.processingSeries = true
+            const updateProgressPayloads = this.seriesLibraryItemIds.map((lid) => {
+              return {
+                libraryItemId: lid,
+                isFinished: newIsFinished
+              }
+            })
+            console.log('Progress payloads', updateProgressPayloads)
+            this.$axios
+              .patch(`/api/me/progress/batch/update`, updateProgressPayloads)
+              .then(() => {
+                this.$toast.success(this.$strings.ToastSeriesUpdateSuccess)
+                this.selectedSeries.progress.isFinished = newIsFinished
+              })
+              .catch((error) => {
+                this.$toast.error(this.$strings.ToastSeriesUpdateFailed)
+                console.error('Failed to batch update read/not read', error)
+              })
+              .finally(() => {
+                this.processingSeries = false
+              })
+          }
+        },
+        type: 'yesNo'
+      }
+      this.$store.commit('globals/setConfirmPrompt', payload)
     },
     updateOrder() {
       this.saveSettings()
@@ -339,16 +436,32 @@ export default {
     },
     setBookshelfTotalEntities(totalEntities) {
       this.totalEntities = totalEntities
+    },
+    rssFeedOpen(data) {
+      if (data.entityId === this.seriesId) {
+        console.log('RSS Feed Opened', data)
+        this.selectedSeries.rssFeed = data
+      }
+    },
+    rssFeedClosed(data) {
+      if (data.entityId === this.seriesId) {
+        console.log('RSS Feed Closed', data)
+        this.selectedSeries.rssFeed = null
+      }
     }
   },
   mounted() {
     this.init()
     this.$eventBus.$on('user-settings', this.settingsUpdated)
     this.$eventBus.$on('bookshelf-total-entities', this.setBookshelfTotalEntities)
+    this.$root.socket.on('rss_feed_open', this.rssFeedOpen)
+    this.$root.socket.on('rss_feed_closed', this.rssFeedClosed)
   },
   beforeDestroy() {
     this.$eventBus.$off('user-settings', this.settingsUpdated)
     this.$eventBus.$off('bookshelf-total-entities', this.setBookshelfTotalEntities)
+    this.$root.socket.off('rss_feed_open', this.rssFeedOpen)
+    this.$root.socket.off('rss_feed_closed', this.rssFeedClosed)
   }
 }
 </script>

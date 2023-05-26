@@ -1,8 +1,11 @@
+
+const fs = require('../libs/fsExtra')
+const { createNewSortInstance } = require('../libs/fastSort')
+
 const Logger = require('../Logger')
 const SocketAuthority = require('../SocketAuthority')
 
 const { reqSupportsWebp } = require('../utils/index')
-const { createNewSortInstance } = require('../libs/fastSort')
 
 const naturalSort = createNewSortInstance({
   comparer: new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' }).compare
@@ -77,8 +80,16 @@ class AuthorController {
             await this.cacheManager.purgeImageCache(req.author.id) // Purge cache
           }
           payload.imagePath = imageData.path
-          payload.relImagePath = imageData.relPath
           hasUpdated = true
+        }
+      } else if (payload.imagePath && payload.imagePath !== req.author.imagePath) { // Changing image path locally
+        if (!await fs.pathExists(payload.imagePath)) { // Make sure image path exists
+          Logger.error(`[AuthorController] Image path does not exist: "${payload.imagePath}"`)
+          return res.status(400).send('Author image path does not exist')
+        }
+
+        if (req.author.imagePath) {
+          await this.cacheManager.purgeImageCache(req.author.id) // Purge cache
         }
       }
     }
@@ -117,6 +128,8 @@ class AuthorController {
       }
 
       if (hasUpdated) {
+        req.author.updatedAt = Date.now()
+
         if (authorNameUpdate) { // Update author name on all books
           const itemsWithAuthor = this.db.libraryItems.filter(li => li.mediaType === 'book' && li.media.metadata.hasAuthor(req.author.id))
           itemsWithAuthor.forEach(libraryItem => {
@@ -154,18 +167,19 @@ class AuthorController {
   }
 
   async match(req, res) {
-    var authorData = null
+    let authorData = null
+    const region = req.body.region || 'us'
     if (req.body.asin) {
-      authorData = await this.authorFinder.findAuthorByASIN(req.body.asin)
+      authorData = await this.authorFinder.findAuthorByASIN(req.body.asin, region)
     } else {
-      authorData = await this.authorFinder.findAuthorByName(req.body.q)
+      authorData = await this.authorFinder.findAuthorByName(req.body.q, region)
     }
     if (!authorData) {
       return res.status(404).send('Author not found')
     }
     Logger.debug(`[AuthorController] match author with "${req.body.q || req.body.asin}"`, authorData)
 
-    var hasUpdates = false
+    let hasUpdates = false
     if (authorData.asin && req.author.asin !== authorData.asin) {
       req.author.asin = authorData.asin
       hasUpdates = true
@@ -175,10 +189,9 @@ class AuthorController {
     if (authorData.image && (!req.author.imagePath || hasUpdates)) {
       this.cacheManager.purgeImageCache(req.author.id)
 
-      var imageData = await this.authorFinder.saveAuthorImage(req.author.id, authorData.image)
+      const imageData = await this.authorFinder.saveAuthorImage(req.author.id, authorData.image)
       if (imageData) {
         req.author.imagePath = imageData.path
-        req.author.relImagePath = imageData.relPath
         hasUpdates = true
       }
     }
@@ -192,7 +205,7 @@ class AuthorController {
       req.author.updatedAt = Date.now()
 
       await this.db.updateEntity('author', req.author)
-      var numBooks = this.db.libraryItems.filter(li => {
+      const numBooks = this.db.libraryItems.filter(li => {
         return li.media.metadata.hasAuthor && li.media.metadata.hasAuthor(req.author.id)
       }).length
       SocketAuthority.emitter('author_updated', req.author.toJSONExpanded(numBooks))
@@ -206,7 +219,15 @@ class AuthorController {
 
   // GET api/authors/:id/image
   async getImage(req, res) {
-    let { query: { width, height, format }, author } = req
+    const { query: { width, height, format, raw }, author } = req
+
+    if (raw) { // any value
+      if (!author.imagePath || !await fs.pathExists(author.imagePath)) {
+        return res.sendStatus(404)
+      }
+
+      return res.sendFile(author.imagePath)
+    }
 
     const options = {
       format: format || (reqSupportsWebp(req) ? 'webp' : 'jpeg'),

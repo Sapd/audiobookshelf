@@ -5,6 +5,19 @@ const Path = require('path')
 const Logger = require('../Logger')
 const { AudioMimeType } = require('./constants')
 
+
+/**
+* Make sure folder separator is POSIX for Windows file paths. e.g. "C:\Users\Abs" becomes "C:/Users/Abs"
+*
+* @param {String} path - Ugly file path
+* @return {String} Pretty posix file path
+*/
+const filePathToPOSIX = (path) => {
+  if (!global.isWin || !path) return path
+  return path.replace(/\\/g, '/')
+}
+module.exports.filePathToPOSIX = filePathToPOSIX
+
 async function getFileStat(path) {
   try {
     var stat = await fs.stat(path)
@@ -80,11 +93,11 @@ function bytesPretty(bytes, decimals = 0) {
 module.exports.bytesPretty = bytesPretty
 
 async function recurseFiles(path, relPathToReplace = null) {
-  path = path.replace(/\\/g, '/')
+  path = filePathToPOSIX(path)
   if (!path.endsWith('/')) path = path + '/'
 
   if (relPathToReplace) {
-    relPathToReplace = relPathToReplace.replace(/\\/g, '/')
+    relPathToReplace = filePathToPOSIX(relPathToReplace)
     if (!relPathToReplace.endsWith('/')) relPathToReplace += '/'
   } else {
     relPathToReplace = path
@@ -161,20 +174,24 @@ async function recurseFiles(path, relPathToReplace = null) {
 }
 module.exports.recurseFiles = recurseFiles
 
-module.exports.downloadFile = async (url, filepath) => {
-  Logger.debug(`[fileUtils] Downloading file to ${filepath}`)
+module.exports.downloadFile = (url, filepath) => {
+  return new Promise(async (resolve, reject) => {
+    Logger.debug(`[fileUtils] Downloading file to ${filepath}`)
+    axios({
+      url,
+      method: 'GET',
+      responseType: 'stream',
+      timeout: 30000
+    }).then((response) => {
+      const writer = fs.createWriteStream(filepath)
+      response.data.pipe(writer)
 
-  const writer = fs.createWriteStream(filepath)
-  const response = await axios({
-    url,
-    method: 'GET',
-    responseType: 'stream',
-    timeout: 30000
-  })
-  response.data.pipe(writer)
-  return new Promise((resolve, reject) => {
-    writer.on('finish', resolve)
-    writer.on('error', reject)
+      writer.on('finish', resolve)
+      writer.on('error', reject)
+    }).catch((err) => {
+      Logger.error(`[fileUtils] Failed to download file "${filepath}"`, err)
+      reject(err)
+    })
   })
 }
 
@@ -197,7 +214,7 @@ module.exports.sanitizeFilename = (filename, colonReplacement = ' - ') => {
   const windowsTrailingRe = /[\. ]+$/
   const lineBreaks = /[\n\r]/g
 
-  sanitized = filename
+  let sanitized = filename
     .replace(':', colonReplacement) // Replace first occurrence of a colon
     .replace(illegalRe, replacement)
     .replace(controlRe, replacement)
@@ -244,4 +261,8 @@ module.exports.removeFile = (path) => {
     Logger.error(`[fileUtils] Failed remove file "${path}"`, error)
     return false
   })
+}
+
+module.exports.encodeUriPath = (path) => {
+  return filePathToPOSIX(path).replace(/%/g, '%25').replace(/#/g, '%23')
 }

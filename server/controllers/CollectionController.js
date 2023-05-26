@@ -26,13 +26,22 @@ class CollectionController {
   }
 
   findOne(req, res) {
-    res.json(req.collection.toJSONExpanded(this.db.libraryItems))
+    const includeEntities = (req.query.include || '').split(',')
+
+    const collectionExpanded = req.collection.toJSONExpanded(this.db.libraryItems)
+
+    if (includeEntities.includes('rssfeed')) {
+      const feedData = this.rssFeedManager.findFeedForEntityId(collectionExpanded.id)
+      collectionExpanded.rssFeed = feedData ? feedData.toJSONMinified() : null
+    }
+
+    res.json(collectionExpanded)
   }
 
   async update(req, res) {
     const collection = req.collection
-    var wasUpdated = collection.update(req.body)
-    var jsonExpanded = collection.toJSONExpanded(this.db.libraryItems)
+    const wasUpdated = collection.update(req.body)
+    const jsonExpanded = collection.toJSONExpanded(this.db.libraryItems)
     if (wasUpdated) {
       await this.db.updateEntity('collection', collection)
       SocketAuthority.emitter('collection_updated', jsonExpanded)
@@ -42,7 +51,11 @@ class CollectionController {
 
   async delete(req, res) {
     const collection = req.collection
-    var jsonExpanded = collection.toJSONExpanded(this.db.libraryItems)
+    const jsonExpanded = collection.toJSONExpanded(this.db.libraryItems)
+
+    // Close rss feed - remove from db and emit socket event
+    await this.rssFeedManager.closeFeedForEntityId(collection.id)
+
     await this.db.removeEntity('collection', collection.id)
     SocketAuthority.emitter('collection_removed', jsonExpanded)
     res.sendStatus(200)
@@ -50,7 +63,7 @@ class CollectionController {
 
   async addBook(req, res) {
     const collection = req.collection
-    var libraryItem = this.db.libraryItems.find(li => li.id === req.body.id)
+    const libraryItem = this.db.libraryItems.find(li => li.id === req.body.id)
     if (!libraryItem) {
       return res.status(500).send('Book not found')
     }
@@ -61,7 +74,7 @@ class CollectionController {
       return res.status(500).send('Book already in collection')
     }
     collection.addBook(req.body.id)
-    var jsonExpanded = collection.toJSONExpanded(this.db.libraryItems)
+    const jsonExpanded = collection.toJSONExpanded(this.db.libraryItems)
     await this.db.updateEntity('collection', collection)
     SocketAuthority.emitter('collection_updated', jsonExpanded)
     res.json(jsonExpanded)

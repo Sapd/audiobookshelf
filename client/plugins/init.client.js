@@ -1,10 +1,16 @@
 import Vue from 'vue'
 import Path from 'path'
 import vClickOutside from 'v-click-outside'
-import { formatDistance, format, addDays, isDate } from 'date-fns'
+import { formatDistance, format, addDays, isDate, setDefaultOptions } from 'date-fns'
+import * as locale from 'date-fns/locale'
 
 Vue.directive('click-outside', vClickOutside.directive)
 
+
+Vue.prototype.$setDateFnsLocale = (localeString) => {
+  if (!locale[localeString]) return 0
+  return setDefaultOptions({ locale: locale[localeString] })
+}
 Vue.prototype.$dateDistanceFromNow = (unixms) => {
   if (!unixms) return ''
   return formatDistance(unixms, Date.now(), { addSuffix: true })
@@ -16,6 +22,22 @@ Vue.prototype.$formatDate = (unixms, fnsFormat = 'MM/dd/yyyy HH:mm') => {
 Vue.prototype.$formatJsDate = (jsdate, fnsFormat = 'MM/dd/yyyy HH:mm') => {
   if (!jsdate || !isDate(jsdate)) return ''
   return format(jsdate, fnsFormat)
+}
+Vue.prototype.$formatTime = (unixms, fnsFormat = 'HH:mm') => {
+    if (!unixms) return ''
+    return format(unixms, fnsFormat)
+}
+Vue.prototype.$formatJsTime = (jsdate, fnsFormat = 'HH:mm') => {
+    if (!jsdate || !isDate(jsdate)) return ''
+    return format(jsdate, fnsFormat)
+}
+Vue.prototype.$formatDatetime = (unixms, fnsDateFormart = 'MM/dd/yyyy', fnsTimeFormat = 'HH:mm') => {
+    if (!unixms) return ''
+    return format(unixms, `${fnsDateFormart} ${fnsTimeFormat}`)
+}
+Vue.prototype.$formatJsDatetime = (jsdate, fnsDateFormart = 'MM/dd/yyyy', fnsTimeFormat = 'HH:mm') => {
+    if (!jsdate || !isDate(jsdate)) return ''
+    return format(jsdate, `${fnsDateFormart} ${fnsTimeFormat}`)
 }
 Vue.prototype.$addDaysToToday = (daysToAdd) => {
   var date = addDays(new Date(), daysToAdd)
@@ -47,7 +69,7 @@ Vue.prototype.$sanitizeFilename = (filename, colonReplacement = ' - ') => {
   const windowsTrailingRe = /[\. ]+$/
   const lineBreaks = /[\n\r]/g
 
-  sanitized = filename
+  let sanitized = filename
     .replace(':', colonReplacement) // Replace first occurrence of a colon
     .replace(illegalRe, replacement)
     .replace(controlRe, replacement)

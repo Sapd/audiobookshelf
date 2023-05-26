@@ -5,10 +5,10 @@
         <span class="material-icons text-2xl">arrow_back</span>
       </nuxt-link>
 
-      <h1 class="text-xl mx-2">Manage Tags</h1>
+      <h1 class="text-xl mx-2">{{ $strings.HeaderManageTags }}</h1>
     </div>
 
-    <p v-if="!tags.length && !loading" class="text-center py-8 text-lg">No Tags</p>
+    <p v-if="!tags.length && !loading" class="text-center py-8 text-lg">{{ $strings.MessageNoTags }}</p>
 
     <div class="border border-white/10">
       <template v-for="(tag, index) in tags">
@@ -17,8 +17,8 @@
           <ui-text-input v-else v-model="newTagName" />
           <div class="flex-grow" />
           <template v-if="editingTag !== tag">
-            <ui-icon-btn v-if="editingTag !== tag" icon="edit" borderless :size="8" icon-font-size="1.1rem" class="mx-1" @click="editTagClick(tag)" />
-            <ui-icon-btn v-if="editingTag !== tag" icon="delete" borderless :size="8" icon-font-size="1.1rem" @click="removeTagClick(tag)" />
+            <ui-icon-btn icon="edit" borderless :size="8" icon-font-size="1.1rem" class="mx-1" @click="editTagClick(tag)" />
+            <ui-icon-btn icon="delete" borderless :size="8" icon-font-size="1.1rem" @click="removeTagClick(tag)" />
           </template>
           <template v-else>
             <ui-btn color="success" small class="mx-2" @click.stop="saveTagClick">{{ $strings.ButtonSave }}</ui-btn>
@@ -28,8 +28,10 @@
       </template>
     </div>
 
-    <div v-if="loading" class="absolute top-0 left-0 w-full h-full bg-black/25 flex items-center justify-center">
-      <ui-loading-indicator />
+    <div v-if="loading" class="absolute top-0 left-0 w-full h-full bg-black/25 rounded-md">
+      <div class="sticky top-0 left-0 w-full h-full flex items-center justify-center" style="max-height: 80vh">
+        <ui-loading-indicator />
+      </div>
     </div>
   </div>
 </template>
@@ -76,14 +78,12 @@ export default {
 
       const tagNameExists = this.tags.find((t) => t !== this.editingTag && t === this.newTagName)
       const tagNameExistsOfDifferentCase = !tagNameExists ? this.tags.find((t) => t !== this.editingTag && t.toLowerCase() === this.newTagName.toLowerCase()) : null
-      console.log('Tag name', this.newTagName, 'ExistS?', tagNameExists, tagNameExistsOfDifferentCase)
-      console.log('Saving tag', this.editingTag, 'with name', this.newTagName)
 
-      let message = `Are you sure you want to rename tag "${this.editingTag}" to "${this.newTagName}" for all items?`
+      let message = this.$getString('MessageConfirmRenameTag', [this.editingTag, this.newTagName])
       if (tagNameExists) {
-        message += '<br><span class="text-sm">Note: This tag already exists so the two tags will be merged.</span>'
+        message += `<br><span class="text-sm">${this.$strings.MessageConfirmRenameTagMergeNote}</span>`
       } else if (tagNameExistsOfDifferentCase) {
-        message += `<br><span class="text-warning text-sm">Warning! A similar tag with a different casing already exists "${tagNameExistsOfDifferentCase}".</span>`
+        message += `<br><span class="text-warning text-sm">${this.$getString('MessageConfirmRenameTagWarning', [tagNameExistsOfDifferentCase])}</span>`
       }
 
       const payload = {
@@ -109,7 +109,7 @@ export default {
       this.$axios
         .$post('/api/tags/rename', payload)
         .then((res) => {
-          this.$toast.success(`${res.numItemsUpdated} Items Updated`)
+          this.$toast.success(this.$getString('MessageItemsUpdated', [res.numItemsUpdated]))
           if (res.tagMerged) {
             this.tags = this.tags.filter((t) => t !== _newTagName)
           }
@@ -133,7 +133,7 @@ export default {
       this.$axios
         .$delete(`/api/tags/${this.$encode(tag)}`)
         .then((res) => {
-          this.$toast.success(`${res.numItemsUpdated} Items Updated`)
+          this.$toast.success(this.$getString('MessageItemsUpdated', [res.numItemsUpdated]))
           this.tags = this.tags.filter((t) => t !== tag)
         })
         .catch((error) => {
@@ -153,7 +153,7 @@ export default {
       this.$axios
         .$get('/api/tags')
         .then((data) => {
-          this.tags = data.tags || []
+          this.tags = (data.tags || []).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
         })
         .catch((error) => {
           console.error('Failed to load tags', error)

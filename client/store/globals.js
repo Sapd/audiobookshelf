@@ -1,6 +1,7 @@
 export const state = () => ({
   isMobile: false,
   isMobileLandscape: false,
+  isMobilePortrait: false,
   showBatchCollectionModal: false,
   showCollectionsModal: false,
   showEditCollectionModal: false,
@@ -8,9 +9,11 @@ export const state = () => ({
   showEditPlaylistModal: false,
   showEditPodcastEpisode: false,
   showViewPodcastEpisodeModal: false,
+  showRSSFeedOpenCloseModal: false,
   showConfirmPrompt: false,
   confirmPromptOptions: null,
   showEditAuthorModal: false,
+  rssFeedEntity: null,
   selectedEpisode: null,
   selectedPlaylistItems: null,
   selectedPlaylist: null,
@@ -30,9 +33,48 @@ export const state = () => ({
       value: 'dd/MM/yyyy'
     },
     {
+      text: 'DD.MM.YYYY',
+      value: 'dd.MM.yyyy'
+    },
+    {
       text: 'YYYY-MM-DD',
       value: 'yyyy-MM-dd'
+    },
+    {
+      text: 'MMM do, yyyy',
+      value: 'MMM do, yyyy'
+    },
+    {
+      text: 'MMMM do, yyyy',
+      value: 'MMMM do, yyyy'
+    },
+    {
+      text: 'dd MMM yyyy',
+      value: 'dd MMM yyyy'
+    },
+    {
+      text: 'dd MMMM yyyy',
+      value: 'dd MMMM yyyy'
     }
+  ],
+  timeFormats: [
+    {
+      text: 'h:mma (am/pm)',
+      value: 'h:mma'
+    },
+    {
+      text: 'HH:mm (24-hour)',
+      value: 'HH:mm'
+    }
+  ],
+  podcastTypes: [
+    { text: 'Episodic', value: 'episodic' },
+    { text: 'Serial', value: 'serial' }
+  ],
+  episodeTypes: [
+    { text: 'Full', value: 'full' },
+    { text: 'Trailer', value: 'trailer' },
+    { text: 'Bonus', value: 'bonus' }
   ],
   libraryIcons: ['database', 'audiobookshelf', 'books-1', 'books-2', 'book-1', 'microphone-1', 'microphone-3', 'radio', 'podcast', 'rss', 'headphones', 'music', 'file-picture', 'rocket', 'power', 'star', 'heart']
 })
@@ -57,14 +99,14 @@ export const getters = {
 
     return `${rootState.routerBasePath}/api/items/${libraryItemId}/cover?token=${userToken}&ts=${lastUpdate}`
   },
-  getLibraryItemCoverSrcById: (state, getters, rootState, rootGetters) => (libraryItemId, placeholder = null) => {
+  getLibraryItemCoverSrcById: (state, getters, rootState, rootGetters) => (libraryItemId, placeholder = null, raw = false) => {
     if (!placeholder) placeholder = `${rootState.routerBasePath}/book_placeholder.jpg`
     if (!libraryItemId) return placeholder
     var userToken = rootGetters['user/getToken']
     if (process.env.NODE_ENV !== 'production') { // Testing
-      return `http://localhost:3333${rootState.routerBasePath}/api/items/${libraryItemId}/cover?token=${userToken}`
+      return `http://localhost:3333${rootState.routerBasePath}/api/items/${libraryItemId}/cover?token=${userToken}${raw ? '&raw=1' : ''}`
     }
-    return `${rootState.routerBasePath}/api/items/${libraryItemId}/cover?token=${userToken}`
+    return `${rootState.routerBasePath}/api/items/${libraryItemId}/cover?token=${userToken}${raw ? '&raw=1' : ''}`
   },
   getIsBatchSelectingMediaItems: (state) => {
     return state.selectedMediaItems.length
@@ -74,7 +116,8 @@ export const getters = {
 export const mutations = {
   updateWindowSize(state, { width, height }) {
     state.isMobile = width < 640 || height < 640
-    state.isMobileLandscape = state.isMobile && height > width
+    state.isMobileLandscape = state.isMobile && height < width
+    state.isMobilePortrait = state.isMobile && height >= width
   },
   setShowCollectionsModal(state, val) {
     state.showBatchCollectionModal = false
@@ -98,6 +141,13 @@ export const mutations = {
   },
   setShowViewPodcastEpisodeModal(state, val) {
     state.showViewPodcastEpisodeModal = val
+  },
+  setShowRSSFeedOpenCloseModal(state, val) {
+    state.showRSSFeedOpenCloseModal = val
+  },
+  setRSSFeedOpenCloseModal(state, entity) {
+    state.rssFeedEntity = entity
+    state.showRSSFeedOpenCloseModal = true
   },
   setShowConfirmPrompt(state, val) {
     state.showConfirmPrompt = val

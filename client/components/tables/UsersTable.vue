@@ -25,23 +25,23 @@
             </div>
           </td>
           <td class="text-xs font-mono hidden sm:table-cell">
-            <ui-tooltip v-if="user.lastSeen" direction="top" :text="$formatDate(user.lastSeen, 'MMMM do, yyyy HH:mm')">
+            <ui-tooltip v-if="user.lastSeen" direction="top" :text="$formatDatetime(user.lastSeen, dateFormat, timeFormat)">
               {{ $dateDistanceFromNow(user.lastSeen) }}
             </ui-tooltip>
           </td>
           <td class="text-xs font-mono hidden sm:table-cell">
-            <ui-tooltip direction="top" :text="$formatDate(user.createdAt, 'MMMM do, yyyy HH:mm')">
-              {{ $formatDate(user.createdAt, 'MMM d, yyyy') }}
+            <ui-tooltip direction="top" :text="$formatDatetime(user.createdAt, dateFormat, timeFormat)">
+              {{ $formatDate(user.createdAt, dateFormat) }}
             </ui-tooltip>
           </td>
           <td class="py-0">
-            <div class="w-full flex justify-center">
+            <div class="w-full flex justify-left">
               <!-- Dont show edit for non-root users -->
               <div v-if="user.type !== 'root' || userIsRoot" class="h-8 w-8 flex items-center justify-center text-white text-opacity-50 hover:text-opacity-100 cursor-pointer" @click.stop="editUser(user)">
-                <span class="material-icons text-base">edit</span>
+                <button type="button" :aria-label="$getString('ButtonUserEdit', [user.username])" class="material-icons text-base">edit</button>
               </div>
               <div v-show="user.type !== 'root'" class="h-8 w-8 flex items-center justify-center text-white text-opacity-50 hover:text-error cursor-pointer" @click.stop="deleteUserClick(user)">
-                <span class="material-icons text-base">delete</span>
+                <button type="button" :aria-label="$getString('ButtonUserDelete', [user.username])" class="material-icons text-base">delete</button>
               </div>
             </div>
           </td>
@@ -74,6 +74,12 @@ export default {
       var usermap = {}
       this.$store.state.users.usersOnline.forEach((u) => (usermap[u.id] = u))
       return usermap
+    },
+    dateFormat() {
+      return this.$store.state.serverSettings.dateFormat
+    },
+    timeFormat() {
+      return this.$store.state.serverSettings.timeFormat
     }
   },
   methods: {

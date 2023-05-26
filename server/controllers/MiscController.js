@@ -19,6 +19,10 @@ class MiscController {
       Logger.warn('User attempted to upload without permission', req.user)
       return res.sendStatus(403)
     }
+    if (!req.files) {
+      Logger.error('Invalid request, no files')
+      return res.sendStatus(400)
+    }
     var files = Object.values(req.files)
     var title = req.body.title
     var author = req.body.author
@@ -86,9 +90,19 @@ class MiscController {
 
   // GET: api/tasks
   getTasks(req, res) {
-    res.json({
+    const includeArray = (req.query.include || '').split(',')
+
+    const data = {
       tasks: this.taskManager.tasks.map(t => t.toJSON())
-    })
+    }
+
+    if (includeArray.includes('queue')) {
+      data.queuedTaskData = {
+        embedMetadata: this.audioMetadataManager.getQueuedTaskData()
+      }
+    }
+
+    res.json(data)
   }
 
   // PATCH: api/settings (admin)
@@ -128,7 +142,7 @@ class MiscController {
       Logger.warn(`[MiscController] Authorize token with forward auth enabled failed for user "${req.user.username}"`)
     }
 
-    const userResponse = this.auth.getUserLoginResponsePayload(req.user, this.rssFeedManager.feedsArray)
+    const userResponse = this.auth.getUserLoginResponsePayload(req.user)
     res.json(userResponse)
   }
 
@@ -207,6 +221,92 @@ class MiscController {
       if (li.media.tags.includes(tag)) {
         li.media.tags = li.media.tags.filter(t => t !== tag)
         Logger.debug(`[MiscController] Remove tag "${tag}" from item "${li.media.metadata.title}"`)
+        await this.db.updateLibraryItem(li)
+        SocketAuthority.emitter('item_updated', li.toJSONExpanded())
+        numItemsUpdated++
+      }
+    }
+
+    res.json({
+      numItemsUpdated
+    })
+  }
+
+  // GET: api/genres
+  getAllGenres(req, res) {
+    if (!req.user.isAdminOrUp) {
+      Logger.error(`[MiscController] Non-admin user attempted to getAllGenres`)
+      return res.sendStatus(404)
+    }
+    const genres = []
+    this.db.libraryItems.forEach((li) => {
+      if (li.media.metadata.genres && li.media.metadata.genres.length) {
+        li.media.metadata.genres.forEach((genre) => {
+          if (!genres.includes(genre)) genres.push(genre)
+        })
+      }
+    })
+    res.json({
+      genres
+    })
+  }
+
+  // POST: api/genres/rename
+  async renameGenre(req, res) {
+    if (!req.user.isAdminOrUp) {
+      Logger.error(`[MiscController] Non-admin user attempted to renameGenre`)
+      return res.sendStatus(404)
+    }
+
+    const genre = req.body.genre
+    const newGenre = req.body.newGenre
+    if (!genre || !newGenre) {
+      Logger.error(`[MiscController] Invalid request body for renameGenre`)
+      return res.sendStatus(400)
+    }
+
+    let genreMerged = false
+    let numItemsUpdated = 0
+
+    for (const li of this.db.libraryItems) {
+      if (!li.media.metadata.genres || !li.media.metadata.genres.length) continue
+
+      if (li.media.metadata.genres.includes(newGenre)) genreMerged = true // new genre is an existing genre so this is a merge
+
+      if (li.media.metadata.genres.includes(genre)) {
+        li.media.metadata.genres = li.media.metadata.genres.filter(g => g !== genre) // Remove old genre
+        if (!li.media.metadata.genres.includes(newGenre)) {
+          li.media.metadata.genres.push(newGenre) // Add new genre
+        }
+        Logger.debug(`[MiscController] Rename genre "${genre}" to "${newGenre}" for item "${li.media.metadata.title}"`)
+        await this.db.updateLibraryItem(li)
+        SocketAuthority.emitter('item_updated', li.toJSONExpanded())
+        numItemsUpdated++
+      }
+    }
+
+    res.json({
+      genreMerged,
+      numItemsUpdated
+    })
+  }
+
+  // DELETE: api/genres/:genre
+  async deleteGenre(req, res) {
+    if (!req.user.isAdminOrUp) {
+      Logger.error(`[MiscController] Non-admin user attempted to deleteGenre`)
+      return res.sendStatus(404)
+    }
+
+    const genre = Buffer.from(decodeURIComponent(req.params.genre), 'base64').toString()
+
+    let numItemsUpdated = 0
+    for (const li of this.db.libraryItems) {
+      if (!li.media.metadata.genres || !li.media.metadata.genres.length) continue
+
+      if (li.media.metadata.genres.includes(genre)) {
+        li.media.metadata.genres = li.media.metadata.genres.filter(t => t !== genre)
+        Logger.debug(`[MiscController] Remove genre "${genre}" from item "${li.media.metadata.title}"`)
         await this.db.updateLibraryItem(li)
         SocketAuthority.emitter('item_updated', li.toJSONExpanded())
         numItemsUpdated++

@@ -23,11 +23,13 @@ const NotificationController = require('../controllers/NotificationController')
 const SearchController = require('../controllers/SearchController')
 const CacheController = require('../controllers/CacheController')
 const ToolsController = require('../controllers/ToolsController')
+const RSSFeedController = require('../controllers/RSSFeedController')
 const MiscController = require('../controllers/MiscController')
 
 const BookFinder = require('../finders/BookFinder')
 const AuthorFinder = require('../finders/AuthorFinder')
 const PodcastFinder = require('../finders/PodcastFinder')
+const MusicFinder = require('../finders/MusicFinder')
 
 const Author = require('../objects/entities/Author')
 const Series = require('../objects/entities/Series')
@@ -53,8 +55,10 @@ class ApiRouter {
     this.bookFinder = new BookFinder()
     this.authorFinder = new AuthorFinder()
     this.podcastFinder = new PodcastFinder()
+    this.musicFinder = new MusicFinder()
 
     this.router = express()
+    this.router.disable('x-powered-by')
     this.init()
   }
 
@@ -70,16 +74,21 @@ class ApiRouter {
 
     this.router.get('/libraries/:id/items', LibraryController.middleware.bind(this), LibraryController.getLibraryItems.bind(this))
     this.router.delete('/libraries/:id/issues', LibraryController.middleware.bind(this), LibraryController.removeLibraryItemsWithIssues.bind(this))
+    this.router.get('/libraries/:id/episode-downloads', LibraryController.middleware.bind(this), LibraryController.getEpisodeDownloadQueue.bind(this))
     this.router.get('/libraries/:id/series', LibraryController.middleware.bind(this), LibraryController.getAllSeriesForLibrary.bind(this))
     this.router.get('/libraries/:id/collections', LibraryController.middleware.bind(this), LibraryController.getCollectionsForLibrary.bind(this))
     this.router.get('/libraries/:id/playlists', LibraryController.middleware.bind(this), LibraryController.getUserPlaylistsForLibrary.bind(this))
+    this.router.get('/libraries/:id/albums', LibraryController.middleware.bind(this), LibraryController.getAlbumsForLibrary.bind(this))
     this.router.get('/libraries/:id/personalized', LibraryController.middleware.bind(this), LibraryController.getLibraryUserPersonalizedOptimal.bind(this))
     this.router.get('/libraries/:id/filterdata', LibraryController.middleware.bind(this), LibraryController.getLibraryFilterData.bind(this))
     this.router.get('/libraries/:id/search', LibraryController.middleware.bind(this), LibraryController.search.bind(this))
     this.router.get('/libraries/:id/stats', LibraryController.middleware.bind(this), LibraryController.stats.bind(this))
     this.router.get('/libraries/:id/authors', LibraryController.middleware.bind(this), LibraryController.getAuthors.bind(this))
+    this.router.get('/libraries/:id/narrators', LibraryController.middleware.bind(this), LibraryController.getNarrators.bind(this))
+    this.router.patch('/libraries/:id/narrators/:narratorId', LibraryController.middleware.bind(this), LibraryController.updateNarrator.bind(this))
+    this.router.delete('/libraries/:id/narrators/:narratorId', LibraryController.middleware.bind(this), LibraryController.removeNarrator.bind(this))
     this.router.get('/libraries/:id/matchall', LibraryController.middleware.bind(this), LibraryController.matchAll.bind(this))
-    this.router.get('/libraries/:id/scan', LibraryController.middleware.bind(this), LibraryController.scan.bind(this))
+    this.router.post('/libraries/:id/scan', LibraryController.middleware.bind(this), LibraryController.scan.bind(this))
     this.router.get('/libraries/:id/recent-episodes', LibraryController.middleware.bind(this), LibraryController.getRecentEpisodes.bind(this))
 
     this.router.post('/libraries/order', LibraryController.reorder.bind(this))
@@ -92,6 +101,7 @@ class ApiRouter {
     this.router.get('/items/:id', LibraryItemController.middleware.bind(this), LibraryItemController.findOne.bind(this))
     this.router.patch('/items/:id', LibraryItemController.middleware.bind(this), LibraryItemController.update.bind(this))
     this.router.delete('/items/:id', LibraryItemController.middleware.bind(this), LibraryItemController.delete.bind(this))
+    this.router.get('/items/:id/download', LibraryItemController.middleware.bind(this), LibraryItemController.download.bind(this))
     this.router.patch('/items/:id/media', LibraryItemController.middleware.bind(this), LibraryItemController.updateMedia.bind(this))
     this.router.get('/items/:id/cover', LibraryItemController.middleware.bind(this), LibraryItemController.getCover.bind(this))
     this.router.post('/items/:id/cover', LibraryItemController.middleware.bind(this), LibraryItemController.uploadCover.bind(this))
@@ -101,12 +111,11 @@ class ApiRouter {
     this.router.post('/items/:id/play', LibraryItemController.middleware.bind(this), LibraryItemController.startPlaybackSession.bind(this))
     this.router.post('/items/:id/play/:episodeId', LibraryItemController.middleware.bind(this), LibraryItemController.startEpisodePlaybackSession.bind(this))
     this.router.patch('/items/:id/tracks', LibraryItemController.middleware.bind(this), LibraryItemController.updateTracks.bind(this))
-    this.router.get('/items/:id/scan', LibraryItemController.middleware.bind(this), LibraryItemController.scan.bind(this))
+    this.router.post('/items/:id/scan', LibraryItemController.middleware.bind(this), LibraryItemController.scan.bind(this))
     this.router.get('/items/:id/tone-object', LibraryItemController.middleware.bind(this), LibraryItemController.getToneMetadataObject.bind(this))
     this.router.post('/items/:id/chapters', LibraryItemController.middleware.bind(this), LibraryItemController.updateMediaChapters.bind(this))
-    this.router.post('/items/:id/open-feed', LibraryItemController.middleware.bind(this), LibraryItemController.openRSSFeed.bind(this))
-    this.router.post('/items/:id/close-feed', LibraryItemController.middleware.bind(this), LibraryItemController.closeRSSFeed.bind(this))
     this.router.post('/items/:id/tone-scan/:index?', LibraryItemController.middleware.bind(this), LibraryItemController.toneScan.bind(this))
+    this.router.delete('/items/:id/file/:ino', LibraryItemController.middleware.bind(this), LibraryItemController.deleteLibraryFile.bind(this))
 
     this.router.post('/items/batch/delete', LibraryItemController.batchDelete.bind(this))
     this.router.post('/items/batch/update', LibraryItemController.batchUpdate.bind(this))
@@ -157,6 +166,7 @@ class ApiRouter {
     //
     // Current User Routes (Me)
     //
+    this.router.get('/me', MeController.getCurrentUser.bind(this))
     this.router.get('/me/listening-sessions', MeController.getListeningSessions.bind(this))
     this.router.get('/me/listening-stats', MeController.getListeningStats.bind(this))
     this.router.get('/me/progress/:id/remove-from-continue-listening', MeController.removeItemFromContinueListening.bind(this))
@@ -169,8 +179,7 @@ class ApiRouter {
     this.router.patch('/me/item/:id/bookmark', MeController.updateBookmark.bind(this))
     this.router.delete('/me/item/:id/bookmark/:time', MeController.removeBookmark.bind(this))
     this.router.patch('/me/password', MeController.updatePassword.bind(this))
-    this.router.patch('/me/settings', MeController.updateSettings.bind(this)) // TODO: Remove after mobile release v0.9.61-beta
-    this.router.post('/me/sync-local-progress', MeController.syncLocalMediaProgress.bind(this))
+    this.router.post('/me/sync-local-progress', MeController.syncLocalMediaProgress.bind(this)) // TODO: Deprecated. Removed from Android. Only used in iOS app now.
     this.router.get('/me/items-in-progress', MeController.getAllLibraryItemsInProgress.bind(this))
     this.router.get('/me/series/:id/remove-from-continue-listening', MeController.removeSeriesFromContinueListening.bind(this))
     this.router.get('/me/series/:id/readd-to-continue-listening', MeController.readdSeriesFromContinueListening.bind(this))
@@ -210,11 +219,13 @@ class ApiRouter {
     //
     this.router.get('/sessions', SessionController.getAllWithUserData.bind(this))
     this.router.delete('/sessions/:id', SessionController.middleware.bind(this), SessionController.delete.bind(this))
+    this.router.get('/sessions/open', SessionController.getOpenSessions.bind(this))
+    this.router.post('/session/local', SessionController.syncLocal.bind(this))
+    this.router.post('/session/local-all', SessionController.syncLocalSessions.bind(this))
     // TODO: Update these endpoints because they are only for open playback sessions
     this.router.get('/session/:id', SessionController.openSessionMiddleware.bind(this), SessionController.getOpenSession.bind(this))
     this.router.post('/session/:id/sync', SessionController.openSessionMiddleware.bind(this), SessionController.sync.bind(this))
     this.router.post('/session/:id/close', SessionController.openSessionMiddleware.bind(this), SessionController.close.bind(this))
-    this.router.post('/session/local', SessionController.syncLocal.bind(this))
 
     //
     // Podcast Routes
@@ -227,11 +238,13 @@ class ApiRouter {
     this.router.get('/podcasts/:id/clear-queue', PodcastController.middleware.bind(this), PodcastController.clearEpisodeDownloadQueue.bind(this))
     this.router.get('/podcasts/:id/search-episode', PodcastController.middleware.bind(this), PodcastController.findEpisode.bind(this))
     this.router.post('/podcasts/:id/download-episodes', PodcastController.middleware.bind(this), PodcastController.downloadEpisodes.bind(this))
+    this.router.post('/podcasts/:id/match-episodes', PodcastController.middleware.bind(this), PodcastController.quickMatchEpisodes.bind(this))
+    this.router.get('/podcasts/:id/episode/:episodeId', PodcastController.middleware.bind(this), PodcastController.getEpisode.bind(this))
     this.router.patch('/podcasts/:id/episode/:episodeId', PodcastController.middleware.bind(this), PodcastController.updateEpisode.bind(this))
     this.router.delete('/podcasts/:id/episode/:episodeId', PodcastController.middleware.bind(this), PodcastController.removeEpisode.bind(this))
 
     //
-    // Notification Routes
+    // Notification Routes (Admin and up)
     //
     this.router.get('/notifications', NotificationController.middleware.bind(this), NotificationController.get.bind(this))
     this.router.patch('/notifications', NotificationController.middleware.bind(this), NotificationController.update.bind(this))
@@ -250,19 +263,29 @@ class ApiRouter {
     this.router.get('/search/podcast', SearchController.findPodcasts.bind(this))
     this.router.get('/search/authors', SearchController.findAuthor.bind(this))
     this.router.get('/search/chapters', SearchController.findChapters.bind(this))
+    this.router.get('/search/tracks', SearchController.findMusicTrack.bind(this))
 
     //
-    // Cache Routes
+    // Cache Routes (Admin and up)
     //
     this.router.post('/cache/purge', CacheController.purgeCache.bind(this))
     this.router.post('/cache/items/purge', CacheController.purgeItemsCache.bind(this))
 
     //
-    // Tools Routes
+    // Tools Routes (Admin and up)
     //
-    this.router.post('/tools/item/:id/encode-m4b', ToolsController.itemMiddleware.bind(this), ToolsController.encodeM4b.bind(this))
-    this.router.delete('/tools/item/:id/encode-m4b', ToolsController.itemMiddleware.bind(this), ToolsController.cancelM4bEncode.bind(this))
-    this.router.post('/tools/item/:id/embed-metadata', ToolsController.itemMiddleware.bind(this), ToolsController.embedAudioFileMetadata.bind(this))
+    this.router.post('/tools/item/:id/encode-m4b', ToolsController.middleware.bind(this), ToolsController.encodeM4b.bind(this))
+    this.router.delete('/tools/item/:id/encode-m4b', ToolsController.middleware.bind(this), ToolsController.cancelM4bEncode.bind(this))
+    this.router.post('/tools/item/:id/embed-metadata', ToolsController.middleware.bind(this), ToolsController.embedAudioFileMetadata.bind(this))
+    this.router.post('/tools/batch/embed-metadata', ToolsController.middleware.bind(this), ToolsController.batchEmbedMetadata.bind(this))
+
+    // 
+    // RSS Feed Routes (Admin and up)
+    //
+    this.router.post('/feeds/item/:itemId/open', RSSFeedController.middleware.bind(this), RSSFeedController.openRSSFeedForItem.bind(this))
+    this.router.post('/feeds/collection/:collectionId/open', RSSFeedController.middleware.bind(this), RSSFeedController.openRSSFeedForCollection.bind(this))
+    this.router.post('/feeds/series/:seriesId/open', RSSFeedController.middleware.bind(this), RSSFeedController.openRSSFeedForSeries.bind(this))
+    this.router.post('/feeds/:id/close', RSSFeedController.middleware.bind(this), RSSFeedController.closeRSSFeed.bind(this))
 
     //
     // Misc Routes
@@ -274,6 +297,9 @@ class ApiRouter {
     this.router.get('/tags', MiscController.getAllTags.bind(this))
     this.router.post('/tags/rename', MiscController.renameTag.bind(this))
     this.router.delete('/tags/:tag', MiscController.deleteTag.bind(this))
+    this.router.get('/genres', MiscController.getAllGenres.bind(this))
+    this.router.post('/genres/rename', MiscController.renameGenre.bind(this))
+    this.router.delete('/genres/:genre', MiscController.deleteGenre.bind(this))
     this.router.post('/validate-cron', MiscController.validateCronExpression.bind(this))
   }
 
@@ -310,10 +336,7 @@ class ApiRouter {
   // Helper Methods
   //
   userJsonWithItemProgressDetails(user, hideRootToken = false) {
-    const json = user.toJSONForBrowser()
-    if (json.type === 'root' && hideRootToken) {
-      json.token = ''
-    }
+    const json = user.toJSONForBrowser(hideRootToken)
 
     json.mediaProgress = json.mediaProgress.map(lip => {
       const libraryItem = this.db.libraryItems.find(li => li.id === lip.libraryItemId)
@@ -351,13 +374,18 @@ class ApiRouter {
 
     // TODO: Remove open sessions for library item
 
-    // remove book from collections
-    const collectionsWithBook = this.db.collections.filter(c => c.books.includes(libraryItem.id))
-    for (let i = 0; i < collectionsWithBook.length; i++) {
-      const collection = collectionsWithBook[i]
-      collection.removeBook(libraryItem.id)
-      await this.db.updateEntity('collection', collection)
-      SocketAuthority.emitter('collection_updated', collection.toJSONExpanded(this.db.libraryItems))
+    if (libraryItem.isBook) {
+      // remove book from collections
+      const collectionsWithBook = this.db.collections.filter(c => c.books.includes(libraryItem.id))
+      for (let i = 0; i < collectionsWithBook.length; i++) {
+        const collection = collectionsWithBook[i]
+        collection.removeBook(libraryItem.id)
+        await this.db.updateEntity('collection', collection)
+        SocketAuthority.emitter('collection_updated', collection.toJSONExpanded(this.db.libraryItems))
+      }
+
+      // Check remove empty series
+      await this.checkRemoveEmptySeries(libraryItem.media.metadata.series, libraryItem.id)
     }
 
     // remove item from playlists
@@ -377,13 +405,37 @@ class ApiRouter {
       }
     }
 
+    // Close rss feed - remove from db and emit socket event
+    await this.rssFeedManager.closeFeedForEntityId(libraryItem.id)
+
     // purge cover cache
     if (libraryItem.media.coverPath) {
       await this.cacheManager.purgeCoverCache(libraryItem.id)
     }
 
+    const itemMetadataPath = Path.join(global.MetadataPath, 'items', libraryItem.id)
+    if (await fs.pathExists(itemMetadataPath)) {
+      Logger.debug(`[ApiRouter] Removing item metadata path "${itemMetadataPath}"`)
+      await fs.remove(itemMetadataPath)
+    }
+
     await this.db.removeLibraryItem(libraryItem.id)
     SocketAuthority.emitter('item_removed', libraryItem.toJSONExpanded())
+  }
+
+  async checkRemoveEmptySeries(seriesToCheck, excludeLibraryItemId = null) {
+    if (!seriesToCheck || !seriesToCheck.length) return
+
+    for (const series of seriesToCheck) {
+      const otherLibraryItemsInSeries = this.db.libraryItems.filter(li => li.id !== excludeLibraryItemId && li.isBook && li.media.metadata.hasSeries(series.id))
+      if (!otherLibraryItemsInSeries.length) {
+        // Close open RSS feed for series
+        await this.rssFeedManager.closeFeedForEntityId(series.id)
+        Logger.debug(`[ApiRouter] Series "${series.name}" is now empty. Removing series`)
+        await this.db.removeEntity('series', series.id)
+        // TODO: Socket events for series?
+      }
+    }
   }
 
   async getUserListeningSessionsHelper(userId) {
@@ -455,11 +507,16 @@ class ApiRouter {
 
       // Create new authors if in payload
       if (mediaMetadata.authors && mediaMetadata.authors.length) {
-        // TODO: validate authors
         const newAuthors = []
         for (let i = 0; i < mediaMetadata.authors.length; i++) {
-          if (mediaMetadata.authors[i].id.startsWith('new')) {
-            let author = this.db.authors.find(au => au.checkNameEquals(mediaMetadata.authors[i].name))
+          const authorName = (mediaMetadata.authors[i].name || '').trim()
+          if (!authorName) {
+            Logger.error(`[ApiRouter] Invalid author object, no name`, mediaMetadata.authors[i])
+            continue
+          }
+
+          if (!mediaMetadata.authors[i].id || mediaMetadata.authors[i].id.startsWith('new')) {
+            let author = this.db.authors.find(au => au.checkNameEquals(authorName))
             if (!author) {
               author = new Author()
               author.setData(mediaMetadata.authors[i])
@@ -473,17 +530,22 @@ class ApiRouter {
         }
         if (newAuthors.length) {
           await this.db.insertEntities('author', newAuthors)
-          SocketAuthority.emitter('authors_added', newAuthors)
+          SocketAuthority.emitter('authors_added', newAuthors.map(au => au.toJSON()))
         }
       }
 
       // Create new series if in payload
       if (mediaMetadata.series && mediaMetadata.series.length) {
-        // TODO: validate series
         const newSeries = []
         for (let i = 0; i < mediaMetadata.series.length; i++) {
-          if (mediaMetadata.series[i].id.startsWith('new')) {
-            let seriesItem = this.db.series.find(se => se.checkNameEquals(mediaMetadata.series[i].name))
+          const seriesName = (mediaMetadata.series[i].name || '').trim()
+          if (!seriesName) {
+            Logger.error(`[ApiRouter] Invalid series object, no name`, mediaMetadata.series[i])
+            continue
+          }
+
+          if (!mediaMetadata.series[i].id || mediaMetadata.series[i].id.startsWith('new')) {
+            let seriesItem = this.db.series.find(se => se.checkNameEquals(seriesName))
             if (!seriesItem) {
               seriesItem = new Series()
               seriesItem.setData(mediaMetadata.series[i])
@@ -497,7 +559,7 @@ class ApiRouter {
         }
         if (newSeries.length) {
           await this.db.insertEntities('series', newSeries)
-          SocketAuthority.emitter('authors_added', newSeries)
+          SocketAuthority.emitter('multiple_series_added', newSeries.map(se => se.toJSON()))
         }
       }
     }

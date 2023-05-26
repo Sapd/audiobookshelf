@@ -11,6 +11,7 @@ const { version } = require('../package.json')
 const dbMigration = require('./utils/dbMigration')
 const filePerms = require('./utils/filePerms')
 const { parseBool } = require('./utils/parseBool')
+const fileUtils = require('./utils/fileUtils')
 const Logger = require('./Logger')
 
 const Auth = require('./Auth')
@@ -41,10 +42,11 @@ class Server {
     this.Port = PORT
     this.Host = HOST
     global.Source = SOURCE
-    global.Uid = isNaN(UID) ? 0 : Number(UID)
-    global.Gid = isNaN(GID) ? 0 : Number(GID)
-    global.ConfigPath = Path.normalize(CONFIG_PATH)
-    global.MetadataPath = Path.normalize(METADATA_PATH)
+    global.isWin = process.platform === 'win32'
+    global.Uid = isNaN(UID) ? undefined : Number(UID)
+    global.Gid = isNaN(GID) ? undefined : Number(GID)
+    global.ConfigPath = fileUtils.filePathToPOSIX(Path.normalize(CONFIG_PATH))
+    global.MetadataPath = fileUtils.filePathToPOSIX(Path.normalize(METADATA_PATH))
     global.RouterBasePath = ROUTER_BASE_PATH
     global.ForwardAuth = {
       Enabled: parseBool(process.env.PROXY_FORWARD_AUTH_ENABLED) && process.env.PROXY_FORWARD_AUTH_USERNAME,
@@ -53,11 +55,7 @@ class Server {
       LogoutURI: process.env.PROXY_FORWARD_AUTH_LOGOUT_URI
     }
 
-    // Fix backslash if not on Windows
-    if (process.platform !== 'win32') {
-      global.ConfigPath = global.ConfigPath.replace(/\\/g, '/')
-      global.MetadataPath = global.MetadataPath.replace(/\\/g, '/')
-    }
+    global.XAccel = process.env.USE_X_ACCEL
 
     if (!fs.pathExistsSync(global.ConfigPath)) {
       fs.mkdirSync(global.ConfigPath)
@@ -81,7 +79,7 @@ class Server {
     this.abMergeManager = new AbMergeManager(this.db, this.taskManager)
     this.playbackSessionManager = new PlaybackSessionManager(this.db)
     this.coverManager = new CoverManager(this.db, this.cacheManager)
-    this.podcastManager = new PodcastManager(this.db, this.watcher, this.notificationManager)
+    this.podcastManager = new PodcastManager(this.db, this.watcher, this.notificationManager, this.taskManager)
     this.audioMetadataManager = new AudioMetadataMangaer(this.db, this.taskManager)
     this.rssFeedManager = new RssFeedManager(this.db)
 
@@ -127,10 +125,10 @@ class Server {
     await this.purgeMetadata() // Remove metadata folders without library item
     await this.playbackSessionManager.removeInvalidSessions()
     await this.cacheManager.ensureCachePaths()
-    await this.abMergeManager.ensureDownloadDirPath()
 
     await this.backupManager.init()
     await this.logManager.init()
+    await this.apiRouter.checkRemoveEmptySeries(this.db.series) // Remove empty series
     await this.rssFeedManager.init()
     this.cronManager.init()
 
@@ -150,6 +148,7 @@ class Server {
     const app = express()
     const router = express.Router()
     app.use(global.RouterBasePath, router)
+    app.disable('x-powered-by')
 
     this.server = http.createServer(app)
 
@@ -219,8 +218,9 @@ class Server {
     ]
     dyanimicRoutes.forEach((route) => router.get(route, (req, res) => res.sendFile(Path.join(distPath, 'index.html'))))
 
-    router.post('/login', this.getLoginRateLimiter(), (req, res) => this.auth.login(req, res, this.rssFeedManager.feedsArray))
-    router.post('/forwardauth', (req, res) => this.auth.getUserFromProxyAuth(req, res, this.rssFeedManager.feedsArray))
+    router.post('/login', this.getLoginRateLimiter(), (req, res) => this.auth.login(req, res))
+    router.post('/forwardauth', (req, res) => this.auth.getUserFromProxyAuth(req, res))
+
     router.post('/logout', this.authMiddleware.bind(this), this.logout.bind(this))
     router.post('/init', (req, res) => {
       if (this.db.hasRootUser) {
@@ -244,7 +244,7 @@ class Server {
 
       // Check forward auth for user
       if (global.ForwardAuth.Enabled) {
-        payload.forwardAuthUserResponse = await this.auth.getUserFromProxyAuth(req, this.rssFeedManager.feedsArray)
+        payload.forwardAuthUserResponse = await this.auth.getUserFromProxyAuth(req)
       }
 
       res.json(payload)

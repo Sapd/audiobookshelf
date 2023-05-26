@@ -27,17 +27,16 @@ class Db {
     this.SeriesPath = Path.join(global.ConfigPath, 'series')
     this.FeedsPath = Path.join(global.ConfigPath, 'feeds')
 
-    const staleTime = 1000 * 60 * 2
-    this.libraryItemsDb = new njodb.Database(this.LibraryItemsPath, { lockoptions: { stale: staleTime } })
-    this.usersDb = new njodb.Database(this.UsersPath, { lockoptions: { stale: staleTime } })
-    this.sessionsDb = new njodb.Database(this.SessionsPath, { lockoptions: { stale: staleTime } })
-    this.librariesDb = new njodb.Database(this.LibrariesPath, { datastores: 2, lockoptions: { stale: staleTime } })
-    this.settingsDb = new njodb.Database(this.SettingsPath, { datastores: 2, lockoptions: { stale: staleTime } })
-    this.collectionsDb = new njodb.Database(this.CollectionsPath, { datastores: 2, lockoptions: { stale: staleTime } })
-    this.playlistsDb = new njodb.Database(this.PlaylistsPath, { datastores: 2, lockoptions: { stale: staleTime } })
-    this.authorsDb = new njodb.Database(this.AuthorsPath, { lockoptions: { stale: staleTime } })
-    this.seriesDb = new njodb.Database(this.SeriesPath, { datastores: 2, lockoptions: { stale: staleTime } })
-    this.feedsDb = new njodb.Database(this.FeedsPath, { datastores: 2, lockoptions: { stale: staleTime } })
+    this.libraryItemsDb = new njodb.Database(this.LibraryItemsPath, this.getNjodbOptions())
+    this.usersDb = new njodb.Database(this.UsersPath, this.getNjodbOptions())
+    this.sessionsDb = new njodb.Database(this.SessionsPath, this.getNjodbOptions())
+    this.librariesDb = new njodb.Database(this.LibrariesPath, this.getNjodbOptions())
+    this.settingsDb = new njodb.Database(this.SettingsPath, this.getNjodbOptions())
+    this.collectionsDb = new njodb.Database(this.CollectionsPath, this.getNjodbOptions())
+    this.playlistsDb = new njodb.Database(this.PlaylistsPath, this.getNjodbOptions())
+    this.authorsDb = new njodb.Database(this.AuthorsPath, this.getNjodbOptions())
+    this.seriesDb = new njodb.Database(this.SeriesPath, this.getNjodbOptions())
+    this.feedsDb = new njodb.Database(this.FeedsPath, this.getNjodbOptions())
 
     this.libraryItems = []
     this.users = []
@@ -57,6 +56,21 @@ class Db {
 
   get hasRootUser() {
     return this.users.some(u => u.id === 'root')
+  }
+
+  getNjodbOptions() {
+    return {
+      lockoptions: {
+        stale: 1000 * 20, // 20 seconds
+        update: 2500,
+        retries: {
+          retries: 20,
+          minTimeout: 250,
+          maxTimeout: 5000,
+          factor: 1
+        }
+      }
+    }
   }
 
   getEntityDb(entityName) {
@@ -88,17 +102,16 @@ class Db {
   }
 
   reinit() {
-    const staleTime = 1000 * 60 * 2
-    this.libraryItemsDb = new njodb.Database(this.LibraryItemsPath, { lockoptions: { stale: staleTime } })
-    this.usersDb = new njodb.Database(this.UsersPath, { lockoptions: { stale: staleTime } })
-    this.sessionsDb = new njodb.Database(this.SessionsPath, { lockoptions: { stale: staleTime } })
-    this.librariesDb = new njodb.Database(this.LibrariesPath, { datastores: 2, lockoptions: { stale: staleTime } })
-    this.settingsDb = new njodb.Database(this.SettingsPath, { datastores: 2, lockoptions: { stale: staleTime } })
-    this.collectionsDb = new njodb.Database(this.CollectionsPath, { datastores: 2, lockoptions: { stale: staleTime } })
-    this.playlistsDb = new njodb.Database(this.PlaylistsPath, { datastores: 2, lockoptions: { stale: staleTime } })
-    this.authorsDb = new njodb.Database(this.AuthorsPath, { lockoptions: { stale: staleTime } })
-    this.seriesDb = new njodb.Database(this.SeriesPath, { datastores: 2, lockoptions: { stale: staleTime } })
-    this.feedsDb = new njodb.Database(this.FeedsPath, { datastores: 2, lockoptions: { stale: staleTime } })
+    this.libraryItemsDb = new njodb.Database(this.LibraryItemsPath, this.getNjodbOptions())
+    this.usersDb = new njodb.Database(this.UsersPath, this.getNjodbOptions())
+    this.sessionsDb = new njodb.Database(this.SessionsPath, this.getNjodbOptions())
+    this.librariesDb = new njodb.Database(this.LibrariesPath, this.getNjodbOptions())
+    this.settingsDb = new njodb.Database(this.SettingsPath, this.getNjodbOptions())
+    this.collectionsDb = new njodb.Database(this.CollectionsPath, this.getNjodbOptions())
+    this.playlistsDb = new njodb.Database(this.PlaylistsPath, this.getNjodbOptions())
+    this.authorsDb = new njodb.Database(this.AuthorsPath, this.getNjodbOptions())
+    this.seriesDb = new njodb.Database(this.SeriesPath, this.getNjodbOptions())
+    this.feedsDb = new njodb.Database(this.FeedsPath, this.getNjodbOptions())
     return this.init()
   }
 
@@ -107,7 +120,7 @@ class Db {
   checkPreviousVersion() {
     return this.settingsDb.select(() => true).then((results) => {
       if (results.data && results.data.length) {
-        var serverSettings = results.data.find(s => s.id === 'server-settings')
+        const serverSettings = results.data.find(s => s.id === 'server-settings')
         if (serverSettings && serverSettings.version && serverSettings.version !== version) {
           return serverSettings.version
         }
@@ -163,7 +176,7 @@ class Db {
     const p4 = this.settingsDb.select(() => true).then(async (results) => {
       if (results.data && results.data.length) {
         this.settings = results.data
-        var serverSettings = this.settings.find(s => s.id === 'server-settings')
+        const serverSettings = this.settings.find(s => s.id === 'server-settings')
         if (serverSettings) {
           this.serverSettings = new ServerSettings(serverSettings)
 
@@ -185,7 +198,7 @@ class Db {
           }
         }
 
-        var notificationSettings = this.settings.find(s => s.id === 'notification-settings')
+        const notificationSettings = this.settings.find(s => s.id === 'notification-settings')
         if (notificationSettings) {
           this.notificationSettings = new NotificationSettings(notificationSettings)
         }
@@ -280,7 +293,7 @@ class Db {
   }
 
   getAllEntities(entityName) {
-    var entityDb = this.getEntityDb(entityName)
+    const entityDb = this.getEntityDb(entityName)
     return entityDb.select(() => true).then((results) => results.data).catch((error) => {
       Logger.error(`[DB] Failed to get all ${entityName}`, error)
       return null
@@ -371,16 +384,16 @@ class Db {
   }
 
   updateEntity(entityName, entity) {
-    var entityDb = this.getEntityDb(entityName)
+    const entityDb = this.getEntityDb(entityName)
 
-    var jsonEntity = entity
+    let jsonEntity = entity
     if (entity && entity.toJSON) {
       jsonEntity = entity.toJSON()
     }
 
     return entityDb.update((record) => record.id === entity.id, () => jsonEntity).then((results) => {
       Logger.debug(`[DB] Updated ${entityName}: ${results.updated}`)
-      var arrayKey = this.getEntityArrayKey(entityName)
+      const arrayKey = this.getEntityArrayKey(entityName)
       if (this[arrayKey]) {
         this[arrayKey] = this[arrayKey].map(e => {
           return e.id === entity.id ? entity : e
@@ -410,10 +423,10 @@ class Db {
     })
   }
 
-  removeEntities(entityName, selectFunc) {
+  removeEntities(entityName, selectFunc, silent = false) {
     var entityDb = this.getEntityDb(entityName)
     return entityDb.delete(selectFunc).then((results) => {
-      Logger.debug(`[DB] Deleted entities ${entityName}: ${results.deleted}`)
+      if (!silent) Logger.debug(`[DB] Deleted entities ${entityName}: ${results.deleted}`)
       var arrayKey = this.getEntityArrayKey(entityName)
       if (this[arrayKey]) {
         this[arrayKey] = this[arrayKey].filter(e => {

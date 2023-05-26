@@ -18,6 +18,7 @@
     <modals-podcast-view-episode />
     <modals-authors-edit-modal />
     <modals-batch-quick-match-model />
+    <modals-rssfeed-open-close-modal />
     <prompt-confirm />
     <readers-reader />
   </div>
@@ -277,6 +278,13 @@ export default {
       console.log('Task finished', task)
       this.$store.commit('tasks/addUpdateTask', task)
     },
+    metadataEmbedQueueUpdate(data) {
+      if (data.queued) {
+        this.$store.commit('tasks/addQueuedEmbedLId', data.libraryItemId)
+      } else {
+        this.$store.commit('tasks/removeQueuedEmbedLId', data.libraryItemId)
+      }
+    },
     userUpdated(user) {
       if (this.$store.state.user.user.id === user.id) {
         this.$store.commit('user/setUser', user)
@@ -291,8 +299,17 @@ export default {
     userStreamUpdate(user) {
       this.$store.commit('users/updateUserOnline', user)
     },
+    userSessionClosed(sessionId) {
+      if (this.$refs.streamContainer) this.$refs.streamContainer.sessionClosedEvent(sessionId)
+    },
     userMediaProgressUpdate(payload) {
       this.$store.commit('user/updateMediaProgress', payload)
+
+      if (payload.data) {
+        if (this.$store.getters['getIsMediaStreaming'](payload.data.libraryItemId, payload.data.episodeId)) {
+          // TODO: Update currently open session if being played from another device
+        }
+      }
     },
     collectionAdded(collection) {
       if (this.currentLibraryId !== collection.libraryId) return
@@ -328,12 +345,6 @@ export default {
         }
       }
       this.$store.commit('libraries/removeUserPlaylist', playlist)
-    },
-    rssFeedOpen(data) {
-      this.$store.commit('feeds/addFeed', data)
-    },
-    rssFeedClosed(data) {
-      this.$store.commit('feeds/removeFeed', data)
     },
     backupApplied() {
       // Force refresh
@@ -403,6 +414,7 @@ export default {
       this.socket.on('user_online', this.userOnline)
       this.socket.on('user_offline', this.userOffline)
       this.socket.on('user_stream_update', this.userStreamUpdate)
+      this.socket.on('user_session_closed', this.userSessionClosed)
       this.socket.on('user_item_progress_updated', this.userMediaProgressUpdate)
 
       // Collection Listeners
@@ -423,10 +435,7 @@ export default {
       // Task Listeners
       this.socket.on('task_started', this.taskStarted)
       this.socket.on('task_finished', this.taskFinished)
-
-      // Feed Listeners
-      this.socket.on('rss_feed_open', this.rssFeedOpen)
-      this.socket.on('rss_feed_closed', this.rssFeedClosed)
+      this.socket.on('metadata_embed_queue_update', this.metadataEmbedQueueUpdate)
 
       this.socket.on('backup_applied', this.backupApplied)
 
@@ -540,11 +549,17 @@ export default {
     },
     loadTasks() {
       this.$axios
-        .$get('/api/tasks')
+        .$get('/api/tasks?include=queue')
         .then((payload) => {
           console.log('Fetched tasks', payload)
           if (payload.tasks) {
             this.$store.commit('tasks/setTasks', payload.tasks)
+          }
+          if (payload.queuedTaskData?.embedMetadata?.length) {
+            this.$store.commit(
+              'tasks/setQueuedEmbedLIds',
+              payload.queuedTaskData.embedMetadata.map((td) => td.libraryItemId)
+            )
           }
         })
         .catch((error) => {
@@ -554,6 +569,7 @@ export default {
     changeLanguage(code) {
       console.log('Changed lang', code)
       this.currentLang = code
+      document.documentElement.lang = code
     }
   },
   beforeMount() {
@@ -577,6 +593,11 @@ export default {
     if (this.$route.query.error) {
       this.$toast.error(this.$route.query.error)
       this.$router.replace(this.$route.path)
+    }
+
+    // Set lang on HTML tag
+    if (this.$languageCodes?.current) {
+      document.documentElement.lang = this.$languageCodes.current
     }
   },
   beforeDestroy() {

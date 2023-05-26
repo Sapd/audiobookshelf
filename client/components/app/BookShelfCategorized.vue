@@ -1,17 +1,17 @@
 <template>
   <div id="bookshelf" ref="wrapper" class="w-full max-w-full h-full overflow-y-scroll relative">
     <!-- Cover size widget -->
-    <widgets-cover-size-widget class="fixed bottom-4 right-4 z-30" />
+    <widgets-cover-size-widget class="fixed bottom-4 right-4 z-50" />
 
     <div v-if="loaded && !shelves.length && !search" class="w-full flex flex-col items-center justify-center py-12">
-      <p class="text-center text-2xl font-book mb-4 py-4">{{ libraryName }} Library is empty!</p>
+      <p class="text-center text-2xl mb-4 py-4">{{ libraryName }} Library is empty!</p>
       <div v-if="userIsAdminOrUp" class="flex">
         <ui-btn to="/config" color="primary" class="w-52 mr-2">Configure Scanner</ui-btn>
         <ui-btn color="success" class="w-52" @click="scan">Scan Library</ui-btn>
       </div>
     </div>
     <div v-else-if="loaded && !shelves.length && search" class="w-full h-40 flex items-center justify-center">
-      <p class="text-center text-xl font-book py-4">No results for query</p>
+      <p class="text-center text-xl py-4">No results for query</p>
     </div>
     <!-- Alternate plain view -->
     <div v-else-if="isAlternativeBookshelfView" class="w-full mb-24">
@@ -28,6 +28,9 @@
         <widgets-authors-slider v-else-if="shelf.type === 'authors'" :key="index + '.'" :items="shelf.entities" :height="192 * sizeMultiplier" class="bookshelf-row pl-8 my-6">
           <p class="font-semibold text-gray-100" :style="{ fontSize: sizeMultiplier + 'rem' }">{{ $strings[shelf.labelStringKey] }}</p>
         </widgets-authors-slider>
+        <widgets-narrators-slider v-else-if="shelf.type === 'narrators'" :key="index + '.'" :items="shelf.entities" :height="100 * sizeMultiplier" class="bookshelf-row pl-8 my-6">
+          <p class="font-semibold text-gray-100" :style="{ fontSize: sizeMultiplier + 'rem' }">{{ $strings[shelf.labelStringKey] }}</p>
+        </widgets-narrators-slider>
       </template>
     </div>
     <!-- Regular bookshelf view -->
@@ -136,7 +139,7 @@ export default {
             const mediaItem = {
               id: thisEntity.id,
               mediaType: thisEntity.mediaType,
-              hasTracks: thisEntity.mediaType === 'podcast' || thisEntity.media.numTracks || (thisEntity.media.tracks && thisEntity.media.tracks.length)
+              hasTracks: thisEntity.mediaType === 'podcast' || thisEntity.media.audioFile || thisEntity.media.numTracks || (thisEntity.media.tracks && thisEntity.media.tracks.length)
             }
             this.$store.commit('globals/setMediaItemSelected', { item: mediaItem, selected: isSelecting })
           } else {
@@ -147,7 +150,7 @@ export default {
         const mediaItem = {
           id: entity.id,
           mediaType: entity.mediaType,
-          hasTracks: entity.mediaType === 'podcast' || entity.media.numTracks || (entity.media.tracks && entity.media.tracks.length)
+          hasTracks: entity.mediaType === 'podcast' || entity.media.audioFile || entity.media.numTracks || (entity.media.tracks && entity.media.tracks.length)
         }
         this.$store.commit('globals/toggleMediaItemSelected', mediaItem)
       }
@@ -167,8 +170,8 @@ export default {
       this.loaded = true
     },
     async fetchCategories() {
-      var categories = await this.$axios
-        .$get(`/api/libraries/${this.currentLibraryId}/personalized`)
+      const categories = await this.$axios
+        .$get(`/api/libraries/${this.currentLibraryId}/personalized?include=rssfeed`)
         .then((data) => {
           return data
         })
@@ -185,8 +188,8 @@ export default {
       this.shelves = categories
     },
     async setShelvesFromSearch() {
-      var shelves = []
-      if (this.results.books && this.results.books.length) {
+      const shelves = []
+      if (this.results.books?.length) {
         shelves.push({
           id: 'books',
           label: 'Books',
@@ -196,7 +199,7 @@ export default {
         })
       }
 
-      if (this.results.podcasts && this.results.podcasts.length) {
+      if (this.results.podcasts?.length) {
         shelves.push({
           id: 'podcasts',
           label: 'Podcasts',
@@ -206,7 +209,7 @@ export default {
         })
       }
 
-      if (this.results.series && this.results.series.length) {
+      if (this.results.series?.length) {
         shelves.push({
           id: 'series',
           label: 'Series',
@@ -221,7 +224,7 @@ export default {
           })
         })
       }
-      if (this.results.tags && this.results.tags.length) {
+      if (this.results.tags?.length) {
         shelves.push({
           id: 'tags',
           label: 'Tags',
@@ -236,7 +239,7 @@ export default {
           })
         })
       }
-      if (this.results.authors && this.results.authors.length) {
+      if (this.results.authors?.length) {
         shelves.push({
           id: 'authors',
           label: 'Authors',
@@ -246,6 +249,20 @@ export default {
             return {
               ...a,
               type: 'author'
+            }
+          })
+        })
+      }
+      if (this.results.narrators?.length) {
+        shelves.push({
+          id: 'narrators',
+          label: 'Narrators',
+          labelStringKey: 'LabelNarrators',
+          type: 'narrators',
+          entities: this.results.narrators.map((n) => {
+            return {
+              ...n,
+              type: 'narrator'
             }
           })
         })
@@ -405,8 +422,6 @@ export default {
       }
     },
     removeListeners() {
-      this.$store.commit('user/removeSettingsListener', 'bookshelf')
-
       if (this.$root.socket) {
         this.$root.socket.off('user_updated', this.userUpdated)
         this.$root.socket.off('author_updated', this.authorUpdated)

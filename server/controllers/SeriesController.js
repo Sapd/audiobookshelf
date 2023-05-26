@@ -5,15 +5,15 @@ class SeriesController {
   constructor() { }
 
   async findOne(req, res) {
-    var include = (req.query.include || '').split(',')
+    const include = (req.query.include || '').split(',').map(v => v.trim()).filter(v => !!v)
 
-    var seriesJson = req.series.toJSON()
+    const seriesJson = req.series.toJSON()
 
     // Add progress map with isFinished flag
     if (include.includes('progress')) {
-      var libraryItemsInSeries = this.db.libraryItems.filter(li => li.mediaType === 'book' && li.media.metadata.hasSeries(seriesJson.id))
-      var libraryItemsFinished = libraryItemsInSeries.filter(li => {
-        var mediaProgress = req.user.getMediaProgress(li.id)
+      const libraryItemsInSeries = this.db.libraryItems.filter(li => li.mediaType === 'book' && li.media.metadata.hasSeries(seriesJson.id))
+      const libraryItemsFinished = libraryItemsInSeries.filter(li => {
+        const mediaProgress = req.user.getMediaProgress(li.id)
         return mediaProgress && mediaProgress.isFinished
       })
       seriesJson.progress = {
@@ -21,6 +21,11 @@ class SeriesController {
         libraryItemIdsFinished: libraryItemsFinished.map(li => li.id),
         isFinished: libraryItemsFinished.length === libraryItemsInSeries.length
       }
+    }
+
+    if (include.includes('rssfeed')) {
+      const feedObj = this.rssFeedManager.findFeedForEntityId(seriesJson.id)
+      seriesJson.rssFeed = feedObj?.toJSONMinified() || null
     }
 
     return res.json(seriesJson)
@@ -41,13 +46,13 @@ class SeriesController {
     const hasUpdated = req.series.update(req.body)
     if (hasUpdated) {
       await this.db.updateEntity('series', req.series)
-      SocketAuthority.emitter('series_updated', req.series)
+      SocketAuthority.emitter('series_updated', req.series.toJSON())
     }
-    res.json(req.series)
+    res.json(req.series.toJSON())
   }
 
   middleware(req, res, next) {
-    var series = this.db.series.find(se => se.id === req.params.id)
+    const series = this.db.series.find(se => se.id === req.params.id)
     if (!series) return res.sendStatus(404)
 
     if (req.method == 'DELETE' && !req.user.canDelete) {

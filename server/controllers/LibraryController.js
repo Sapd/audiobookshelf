@@ -59,7 +59,9 @@ class LibraryController {
   findAll(req, res) {
     const librariesAccessible = req.user.librariesAccessible || []
     if (librariesAccessible && librariesAccessible.length) {
-      return res.json(this.db.libraries.filter(lib => librariesAccessible.includes(lib.id)).map(lib => lib.toJSON()))
+      return res.json({
+        libraries: this.db.libraries.filter(lib => librariesAccessible.includes(lib.id)).map(lib => lib.toJSON())
+      })
     }
 
     res.json({
@@ -78,6 +80,11 @@ class LibraryController {
       })
     }
     return res.json(req.library)
+  }
+
+  async getEpisodeDownloadQueue(req, res) {
+    const libraryDownloadQueueDetails = this.podcastManager.getDownloadQueueDetails(req.library.id)
+    return res.json(libraryDownloadQueueDetails)
   }
 
   async update(req, res) {
@@ -168,8 +175,11 @@ class LibraryController {
   // api/libraries/:id/items
   // TODO: Optimize this method, items are iterated through several times but can be combined
   getLibraryItems(req, res) {
-    var libraryItems = req.libraryItems
-    var payload = {
+    let libraryItems = req.libraryItems
+
+    const include = (req.query.include || '').split(',').map(v => v.trim().toLowerCase()).filter(v => !!v)
+
+    const payload = {
       results: [],
       total: libraryItems.length,
       limit: req.query.limit && !isNaN(req.query.limit) ? Number(req.query.limit) : 0,
@@ -179,7 +189,8 @@ class LibraryController {
       filterBy: req.query.filter,
       mediaType: req.library.mediaType,
       minified: req.query.minified === '1',
-      collapseseries: req.query.collapseseries === '1'
+      collapseseries: req.query.collapseseries === '1',
+      include: include.join(',')
     }
     const mediaIsBook = payload.mediaType === 'book'
 
@@ -217,12 +228,22 @@ class LibraryController {
     }
 
     // Step 3 - Sort the retrieved library items.
-    var sortArray = []
+    const sortArray = []
 
     // When on the series page, sort by sequence only
     if (payload.sortBy === 'book.volumeNumber') payload.sortBy = null // TODO: Remove temp fix after mobile release 0.9.60
     if (filterSeries && !payload.sortBy) {
       sortArray.push({ asc: (li) => li.media.metadata.getSeries(filterSeries).sequence })
+      // If no series sequence then fallback to sorting by title (or collapsed series name for sub-series)
+      sortArray.push({
+        asc: (li) => {
+          if (this.db.serverSettings.sortingIgnorePrefix) {
+            return li.collapsedSeries?.nameIgnorePrefix || li.media.metadata.titleIgnorePrefix
+          } else {
+            return li.collapsedSeries?.name || li.media.metadata.title
+          }
+        }
+      })
     }
 
     if (payload.sortBy) {
@@ -292,13 +313,13 @@ class LibraryController {
 
     // Step 3.5: Limit items
     if (payload.limit) {
-      var startIndex = payload.page * payload.limit
+      const startIndex = payload.page * payload.limit
       libraryItems = libraryItems.slice(startIndex, startIndex + payload.limit)
     }
 
     // Step 4 - Transform the items to pass to the client side
     payload.results = libraryItems.map(li => {
-      let json = payload.minified ? li.toJSONMinified() : li.toJSON()
+      const json = payload.minified ? li.toJSONMinified() : li.toJSON()
 
       if (li.collapsedSeries) {
         json.collapsedSeries = {
@@ -313,7 +334,7 @@ class LibraryController {
         // series represents in the filtered series
         if (filterSeries) {
           json.collapsedSeries.seriesSequenceList =
-            naturalSort(li.collapsedSeries.books.map(b => b.filterSeriesSequence)).asc()
+            naturalSort(li.collapsedSeries.books.filter(b => b.filterSeriesSequence).map(b => b.filterSeriesSequence)).asc()
               .reduce((ranges, currentSequence) => {
                 let lastRange = ranges.at(-1)
                 let isNumber = /^(\d+|\d+\.\d*|\d*\.\d+)$/.test(currentSequence)
@@ -331,9 +352,17 @@ class LibraryController {
               .map(r => r.start == r.end ? r.start : `${r.start}-${r.end}`)
               .join(', ')
         }
-      } else if (filterSeries) {
-        // If filtering by series, make sure to include the series metadata
-        json.media.metadata.series = li.media.metadata.getSeries(filterSeries)
+      } else {
+        // add rssFeed object if "include=rssfeed" was put in query string (only for non-collapsed series)
+        if (include.includes('rssfeed')) {
+          const feedData = this.rssFeedManager.findFeedForEntityId(json.id)
+          json.rssFeed = feedData ? feedData.toJSONMinified() : null
+        }
+
+        if (filterSeries) {
+          // If filtering by series, make sure to include the series metadata
+          json.media.metadata.series = li.media.metadata.getSeries(filterSeries)
+        }
       }
 
       return json
@@ -361,6 +390,9 @@ class LibraryController {
   // api/libraries/:id/series
   async getAllSeriesForLibrary(req, res) {
     const libraryItems = req.libraryItems
+
+    const include = (req.query.include || '').split(',').map(v => v.trim().toLowerCase()).filter(v => !!v)
+
     const payload = {
       results: [],
       total: 0,
@@ -369,7 +401,8 @@ class LibraryController {
       sortBy: req.query.sort,
       sortDesc: req.query.desc === '1',
       filterBy: req.query.filter,
-      minified: req.query.minified === '1'
+      minified: req.query.minified === '1',
+      include: include.join(',')
     }
 
     let series = libraryHelpers.getSeriesFromBooks(libraryItems, this.db.series, null, payload.filterBy, req.user, payload.minified)
@@ -384,6 +417,10 @@ class LibraryController {
             return se.totalDuration
           } else if (payload.sortBy === 'addedAt') {
             return se.addedAt
+          } else if (payload.sortBy === 'lastBookUpdated') {
+            return Math.max(...(se.books).map(x => x.updatedAt), 0)
+          } else if (payload.sortBy === 'lastBookAdded') {
+            return Math.max(...(se.books).map(x => x.addedAt), 0)
           } else { // sort by name
             return this.db.serverSettings.sortingIgnorePrefix ? se.nameIgnorePrefixSort : se.name
           }
@@ -394,8 +431,17 @@ class LibraryController {
     payload.total = series.length
 
     if (payload.limit) {
-      var startIndex = payload.page * payload.limit
+      const startIndex = payload.page * payload.limit
       series = series.slice(startIndex, startIndex + payload.limit)
+    }
+
+    // add rssFeed when "include=rssfeed" is in query string
+    if (include.includes('rssfeed')) {
+      series = series.map((se) => {
+        const feedData = this.rssFeedManager.findFeedForEntityId(se.id)
+        se.rssFeed = feedData?.toJSONMinified() || null
+        return se
+      })
     }
 
     payload.results = series
@@ -404,9 +450,11 @@ class LibraryController {
 
   // api/libraries/:id/collections
   async getCollectionsForLibrary(req, res) {
-    var libraryItems = req.libraryItems
+    const libraryItems = req.libraryItems
 
-    var payload = {
+    const include = (req.query.include || '').split(',').map(v => v.trim().toLowerCase()).filter(v => !!v)
+
+    const payload = {
       results: [],
       total: 0,
       limit: req.query.limit && !isNaN(req.query.limit) ? Number(req.query.limit) : 0,
@@ -414,20 +462,28 @@ class LibraryController {
       sortBy: req.query.sort,
       sortDesc: req.query.desc === '1',
       filterBy: req.query.filter,
-      minified: req.query.minified === '1'
+      minified: req.query.minified === '1',
+      include: include.join(',')
     }
 
-    var collections = this.db.collections.filter(c => c.libraryId === req.library.id).map(c => {
-      var expanded = c.toJSONExpanded(libraryItems, payload.minified)
+    let collections = this.db.collections.filter(c => c.libraryId === req.library.id).map(c => {
+      const expanded = c.toJSONExpanded(libraryItems, payload.minified)
+
       // If all books restricted to user in this collection then hide this collection
       if (!expanded.books.length && c.books.length) return null
+
+      if (include.includes('rssfeed')) {
+        const feedData = this.rssFeedManager.findFeedForEntityId(c.id)
+        expanded.rssFeed = feedData?.toJSONMinified() || null
+      }
+
       return expanded
     }).filter(c => !!c)
 
     payload.total = collections.length
 
     if (payload.limit) {
-      var startIndex = payload.page * payload.limit
+      const startIndex = payload.page * payload.limit
       collections = collections.slice(startIndex, startIndex + payload.limit)
     }
 
@@ -455,6 +511,32 @@ class LibraryController {
     res.json(payload)
   }
 
+  // api/libraries/:id/albums
+  async getAlbumsForLibrary(req, res) {
+    if (!req.library.isMusic) {
+      return res.status(400).send('Invalid library media type')
+    }
+
+    let libraryItems = this.db.libraryItems.filter(li => li.libraryId === req.library.id)
+    let albums = libraryHelpers.groupMusicLibraryItemsIntoAlbums(libraryItems)
+    albums = naturalSort(albums).asc(a => a.title) // Alphabetical by album title
+
+    const payload = {
+      results: [],
+      total: albums.length,
+      limit: req.query.limit && !isNaN(req.query.limit) ? Number(req.query.limit) : 0,
+      page: req.query.page && !isNaN(req.query.page) ? Number(req.query.page) : 0
+    }
+
+    if (payload.limit) {
+      const startIndex = payload.page * payload.limit
+      albums = albums.slice(startIndex, startIndex + payload.limit)
+    }
+
+    payload.results = albums
+    res.json(payload)
+  }
+
   async getLibraryFilterData(req, res) {
     res.json(libraryHelpers.getDistinctFilterDataNew(req.libraryItems))
   }
@@ -464,9 +546,10 @@ class LibraryController {
   async getLibraryUserPersonalizedOptimal(req, res) {
     const mediaType = req.library.mediaType
     const libraryItems = req.libraryItems
-    const limitPerShelf = req.query.limit && !isNaN(req.query.limit) ? Number(req.query.limit) : 10
+    const limitPerShelf = req.query.limit && !isNaN(req.query.limit) ? Number(req.query.limit) || 10 : 10
+    const include = (req.query.include || '').split(',').map(v => v.trim().toLowerCase()).filter(v => !!v)
 
-    const categories = libraryHelpers.buildPersonalizedShelves(req.user, libraryItems, mediaType, this.db.series, this.db.authors, limitPerShelf)
+    const categories = libraryHelpers.buildPersonalizedShelves(this, req.user, libraryItems, mediaType, limitPerShelf, include)
     res.json(categories)
   }
 
@@ -508,16 +591,17 @@ class LibraryController {
     if (!req.query.q) {
       return res.status(400).send('No query string')
     }
-    var libraryItems = req.libraryItems
-    var maxResults = req.query.limit && !isNaN(req.query.limit) ? Number(req.query.limit) : 12
+    const libraryItems = req.libraryItems
+    const maxResults = req.query.limit && !isNaN(req.query.limit) ? Number(req.query.limit) : 12
 
-    var itemMatches = []
-    var authorMatches = {}
-    var seriesMatches = {}
-    var tagMatches = {}
+    const itemMatches = []
+    const authorMatches = {}
+    const narratorMatches = {}
+    const seriesMatches = {}
+    const tagMatches = {}
 
     libraryItems.forEach((li) => {
-      var queryResult = li.searchQuery(req.query.q)
+      const queryResult = li.searchQuery(req.query.q)
       if (queryResult.matchKey) {
         itemMatches.push({
           libraryItem: li.toJSONExpanded(),
@@ -525,20 +609,20 @@ class LibraryController {
           matchText: queryResult.matchText
         })
       }
-      if (queryResult.series && queryResult.series.length) {
+      if (queryResult.series?.length) {
         queryResult.series.forEach((se) => {
           if (!seriesMatches[se.id]) {
-            var _series = this.db.series.find(_se => _se.id === se.id)
+            const _series = this.db.series.find(_se => _se.id === se.id)
             if (_series) seriesMatches[se.id] = { series: _series.toJSON(), books: [li.toJSON()] }
           } else {
             seriesMatches[se.id].books.push(li.toJSON())
           }
         })
       }
-      if (queryResult.authors && queryResult.authors.length) {
+      if (queryResult.authors?.length) {
         queryResult.authors.forEach((au) => {
           if (!authorMatches[au.id]) {
-            var _author = this.db.authors.find(_au => _au.id === au.id)
+            const _author = this.db.authors.find(_au => _au.id === au.id)
             if (_author) {
               authorMatches[au.id] = _author.toJSON()
               authorMatches[au.id].numBooks = 1
@@ -548,7 +632,7 @@ class LibraryController {
           }
         })
       }
-      if (queryResult.tags && queryResult.tags.length) {
+      if (queryResult.tags?.length) {
         queryResult.tags.forEach((tag) => {
           if (!tagMatches[tag]) {
             tagMatches[tag] = { name: tag, books: [li.toJSON()] }
@@ -557,13 +641,23 @@ class LibraryController {
           }
         })
       }
+      if (queryResult.narrators?.length) {
+        queryResult.narrators.forEach((narrator) => {
+          if (!narratorMatches[narrator]) {
+            narratorMatches[narrator] = { name: narrator, books: [li.toJSON()] }
+          } else {
+            narratorMatches[narrator].books.push(li.toJSON())
+          }
+        })
+      }
     })
-    var itemKey = req.library.mediaType
-    var results = {
+    const itemKey = req.library.mediaType
+    const results = {
       [itemKey]: itemMatches.slice(0, maxResults),
       tags: Object.values(tagMatches).slice(0, maxResults),
       authors: Object.values(authorMatches).slice(0, maxResults),
-      series: Object.values(seriesMatches).slice(0, maxResults)
+      series: Object.values(seriesMatches).slice(0, maxResults),
+      narrators: Object.values(narratorMatches).slice(0, maxResults)
     }
     res.json(results)
   }
@@ -573,6 +667,7 @@ class LibraryController {
     var authorsWithCount = libraryHelpers.getAuthorsWithCount(libraryItems)
     var genresWithCount = libraryHelpers.getGenresWithCount(libraryItems)
     var durationStats = libraryHelpers.getItemDurationStats(libraryItems)
+    var sizeStats = libraryHelpers.getItemSizeStats(libraryItems)
     var stats = {
       totalItems: libraryItems.length,
       totalAuthors: Object.keys(authorsWithCount).length,
@@ -581,6 +676,7 @@ class LibraryController {
       longestItems: durationStats.longestItems,
       numAudioTracks: durationStats.numAudioTracks,
       totalSize: libraryHelpers.getLibraryItemsTotalSize(libraryItems),
+      largestItems: sizeStats.largestItems,
       authorsWithCount,
       genresWithCount
     }
@@ -588,13 +684,12 @@ class LibraryController {
   }
 
   async getAuthors(req, res) {
-    var libraryItems = req.libraryItems
-    var authors = {}
-    libraryItems.forEach((li) => {
+    const authors = {}
+    req.libraryItems.forEach((li) => {
       if (li.media.metadata.authors && li.media.metadata.authors.length) {
         li.media.metadata.authors.forEach((au) => {
           if (!authors[au.id]) {
-            var _author = this.db.authors.find(_au => _au.id === au.id)
+            const _author = this.db.authors.find(_au => _au.id === au.id)
             if (_author) {
               authors[au.id] = _author.toJSON()
               authors[au.id].numBooks = 1
@@ -611,6 +706,85 @@ class LibraryController {
     })
   }
 
+  async getNarrators(req, res) {
+    const narrators = {}
+    req.libraryItems.forEach((li) => {
+      if (li.media.metadata.narrators?.length) {
+        li.media.metadata.narrators.forEach((n) => {
+          if (typeof n !== 'string') {
+            Logger.error(`[LibraryController] getNarrators: Invalid narrator "${n}" on book "${li.media.metadata.title}"`)
+          } else if (!narrators[n]) {
+            narrators[n] = {
+              id: encodeURIComponent(Buffer.from(n).toString('base64')),
+              name: n,
+              numBooks: 1
+            }
+          } else {
+            narrators[n].numBooks++
+          }
+        })
+      }
+    })
+
+    res.json({
+      narrators: naturalSort(Object.values(narrators)).asc(n => n.name)
+    })
+  }
+
+  async updateNarrator(req, res) {
+    if (!req.user.canUpdate) {
+      Logger.error(`[LibraryController] Unauthorized user "${req.user.username}" attempted to update narrator`)
+      return res.sendStatus(403)
+    }
+
+    const narratorName = libraryHelpers.decode(req.params.narratorId)
+    const updatedName = req.body.name
+    if (!updatedName) {
+      return res.status(400).send('Invalid request payload. Name not specified.')
+    }
+
+    const itemsUpdated = []
+    for (const libraryItem of req.libraryItems) {
+      if (libraryItem.media.metadata.updateNarrator(narratorName, updatedName)) {
+        itemsUpdated.push(libraryItem)
+      }
+    }
+
+    if (itemsUpdated.length) {
+      await this.db.updateLibraryItems(itemsUpdated)
+      SocketAuthority.emitter('items_updated', itemsUpdated.map(li => li.toJSONExpanded()))
+    }
+
+    res.json({
+      updated: itemsUpdated.length
+    })
+  }
+
+  async removeNarrator(req, res) {
+    if (!req.user.canUpdate) {
+      Logger.error(`[LibraryController] Unauthorized user "${req.user.username}" attempted to remove narrator`)
+      return res.sendStatus(403)
+    }
+
+    const narratorName = libraryHelpers.decode(req.params.narratorId)
+
+    const itemsUpdated = []
+    for (const libraryItem of req.libraryItems) {
+      if (libraryItem.media.metadata.removeNarrator(narratorName)) {
+        itemsUpdated.push(libraryItem)
+      }
+    }
+
+    if (itemsUpdated.length) {
+      await this.db.updateLibraryItems(itemsUpdated)
+      SocketAuthority.emitter('items_updated', itemsUpdated.map(li => li.toJSONExpanded()))
+    }
+
+    res.json({
+      updated: itemsUpdated.length
+    })
+  }
+
   async matchAll(req, res) {
     if (!req.user.isAdminOrUp) {
       Logger.error(`[LibraryController] Non-root user attempted to match library items`, req.user)
@@ -620,13 +794,13 @@ class LibraryController {
     res.sendStatus(200)
   }
 
-  // GET: api/libraries/:id/scan
+  // POST: api/libraries/:id/scan
   async scan(req, res) {
     if (!req.user.isAdminOrUp) {
       Logger.error(`[LibraryController] Non-root user attempted to scan library`, req.user)
       return res.sendStatus(403)
     }
-    var options = {
+    const options = {
       forceRescan: req.query.force == 1
     }
     res.sendStatus(200)
@@ -680,7 +854,7 @@ class LibraryController {
       return res.sendStatus(404)
     }
 
-    var library = this.db.libraries.find(lib => lib.id === req.params.id)
+    const library = this.db.libraries.find(lib => lib.id === req.params.id)
     if (!library) {
       return res.status(404).send('Library not found')
     }
