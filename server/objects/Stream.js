@@ -10,7 +10,7 @@ const Ffmpeg = require('../libs/fluentFfmpeg')
 const { secondsToTimestamp } = require('../utils/index')
 const { writeConcatFile } = require('../utils/ffmpegHelpers')
 const { AudioMimeType } = require('../utils/constants')
-const hlsPlaylistGenerator = require('../utils/hlsPlaylistGenerator')
+const hlsPlaylistGenerator = require('../utils/generators/hlsPlaylistGenerator')
 const AudioTrack = require('./files/AudioTrack')
 
 class Stream extends EventEmitter {
@@ -83,7 +83,8 @@ class Stream extends EventEmitter {
       AudioMimeType.AIFF,
       AudioMimeType.WEBM,
       AudioMimeType.WEBMA,
-      AudioMimeType.AWB
+      AudioMimeType.AWB,
+      AudioMimeType.CAF
     ]
   }
   get codecsToForceAAC() {
@@ -338,9 +339,9 @@ class Stream extends EventEmitter {
       } else {
         Logger.error('Ffmpeg Err', '"' + err.message + '"')
 
-        // Temporary workaround for https://github.com/advplyr/audiobookshelf/issues/172
-        const aacErrorMsg = 'ffmpeg exited with code 1: Could not write header for output file #0 (incorrect codec parameters ?)'
-        if (audioCodec === 'copy' && this.isAACEncodable && err.message && err.message.startsWith(aacErrorMsg)) {
+        // Temporary workaround for https://github.com/advplyr/audiobookshelf/issues/172 and https://github.com/advplyr/audiobookshelf/issues/2157
+        const aacErrorMsg = 'ffmpeg exited with code 1:'
+        if (audioCodec === 'copy' && this.isAACEncodable && err.message?.startsWith(aacErrorMsg)) {
           Logger.info(`[Stream] Re-attempting stream with AAC encode`)
           this.transcodeOptions.forceAAC = true
           this.reset(this.startTime)

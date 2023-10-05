@@ -137,8 +137,7 @@ module.exports.cleanStringForSearch = (str) => {
 
 const getTitleParts = (title) => {
   if (!title) return ['', null]
-  var prefixesToIgnore = global.ServerSettings.sortingPrefixes || []
-  prefixes = []
+  const prefixesToIgnore = global.ServerSettings.sortingPrefixes || []
   for (const prefix of prefixesToIgnore) {
     // e.g. for prefix "the". If title is "The Book" return "Book, The"
     if (title.toLowerCase().startsWith(`${prefix} `)) {
@@ -148,10 +147,22 @@ const getTitleParts = (title) => {
   return [title, null]
 }
 
+/**
+ * Remove sortingPrefixes from title
+ * @example "The Good Book" => "Good Book"
+ * @param {string} title 
+ * @returns {string}
+ */
 module.exports.getTitleIgnorePrefix = (title) => {
   return getTitleParts(title)[0]
 }
 
+/**
+ * Put sorting prefix at the end of title 
+ * @example "The Good Book" => "Good Book, The"
+ * @param {string} title 
+ * @returns {string}
+ */
 module.exports.getTitlePrefixAtEnd = (title) => {
   let [sort, prefix] = getTitleParts(title)
   return prefix ? `${sort}, ${prefix}` : title

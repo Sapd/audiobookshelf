@@ -15,7 +15,6 @@ class ServerSettings {
     this.scannerPreferMatchedMetadata = false
     this.scannerDisableWatcher = false
     this.scannerPreferOverdriveMediaMarker = false
-    this.scannerUseTone = false
 
     // Metadata - choose to store inside users library item folder
     this.storeCoverWithItem = false
@@ -30,7 +29,6 @@ class ServerSettings {
     this.backupSchedule = false // If false then auto-backups are disabled
     this.backupsToKeep = 2
     this.maxBackupSize = 1
-    this.backupMetadataCovers = true
 
     // Logger
     this.loggerDailyLogsToKeep = 7
@@ -45,11 +43,10 @@ class ServerSettings {
 
     // Sorting
     this.sortingIgnorePrefix = false
-    this.sortingPrefixes = ['the']
+    this.sortingPrefixes = ['the', 'a']
 
     // Misc Flags
     this.chromecastEnabled = false
-    this.enableEReader = false
     this.dateFormat = 'MM/dd/yyyy'
     this.timeFormat = 'HH:mm'
     this.language = 'en-us'
@@ -73,7 +70,6 @@ class ServerSettings {
     this.scannerPreferMatchedMetadata = !!settings.scannerPreferMatchedMetadata
     this.scannerDisableWatcher = !!settings.scannerDisableWatcher
     this.scannerPreferOverdriveMediaMarker = !!settings.scannerPreferOverdriveMediaMarker
-    this.scannerUseTone = !!settings.scannerUseTone
 
     this.storeCoverWithItem = !!settings.storeCoverWithItem
     this.storeMetadataWithItem = !!settings.storeMetadataWithItem
@@ -85,7 +81,6 @@ class ServerSettings {
     this.backupSchedule = settings.backupSchedule || false
     this.backupsToKeep = settings.backupsToKeep || 2
     this.maxBackupSize = settings.maxBackupSize || 1
-    this.backupMetadataCovers = settings.backupMetadataCovers !== false
 
     this.loggerDailyLogsToKeep = settings.loggerDailyLogsToKeep || 7
     this.loggerScannerLogsToKeep = settings.loggerScannerLogsToKeep || 2
@@ -96,7 +91,6 @@ class ServerSettings {
     this.sortingIgnorePrefix = !!settings.sortingIgnorePrefix
     this.sortingPrefixes = settings.sortingPrefixes || ['the']
     this.chromecastEnabled = !!settings.chromecastEnabled
-    this.enableEReader = !!settings.enableEReader
     this.dateFormat = settings.dateFormat || 'MM/dd/yyyy'
     this.timeFormat = settings.timeFormat || 'HH:mm'
     this.language = settings.language || 'en-us'
@@ -141,7 +135,6 @@ class ServerSettings {
       scannerPreferMatchedMetadata: this.scannerPreferMatchedMetadata,
       scannerDisableWatcher: this.scannerDisableWatcher,
       scannerPreferOverdriveMediaMarker: this.scannerPreferOverdriveMediaMarker,
-      scannerUseTone: this.scannerUseTone,
       storeCoverWithItem: this.storeCoverWithItem,
       storeMetadataWithItem: this.storeMetadataWithItem,
       metadataFileFormat: this.metadataFileFormat,
@@ -150,15 +143,14 @@ class ServerSettings {
       backupSchedule: this.backupSchedule,
       backupsToKeep: this.backupsToKeep,
       maxBackupSize: this.maxBackupSize,
-      backupMetadataCovers: this.backupMetadataCovers,
       loggerDailyLogsToKeep: this.loggerDailyLogsToKeep,
       loggerScannerLogsToKeep: this.loggerScannerLogsToKeep,
       homeBookshelfView: this.homeBookshelfView,
       bookshelfView: this.bookshelfView,
+      podcastEpisodeSchedule: this.podcastEpisodeSchedule,
       sortingIgnorePrefix: this.sortingIgnorePrefix,
       sortingPrefixes: [...this.sortingPrefixes],
       chromecastEnabled: this.chromecastEnabled,
-      enableEReader: this.enableEReader,
       dateFormat: this.dateFormat,
       timeFormat: this.timeFormat,
       language: this.language,

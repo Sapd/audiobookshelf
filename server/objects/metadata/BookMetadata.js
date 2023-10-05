@@ -218,7 +218,7 @@ class BookMetadata {
 
   // Updates author name
   updateAuthor(updatedAuthor) {
-    var author = this.authors.find(au => au.id === updatedAuthor.id)
+    const author = this.authors.find(au => au.id === updatedAuthor.id)
     if (!author || author.name == updatedAuthor.name) return false
     author.name = updatedAuthor.name
     return true
@@ -330,10 +330,6 @@ class BookMetadata {
       {
         tag: 'tagASIN',
         key: 'asin'
-      },
-      {
-        tag: 'tagOverdriveMediaMarker',
-        key: 'overdriveMediaMarker'
       }
     ]
 
