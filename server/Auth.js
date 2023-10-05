@@ -9,6 +9,8 @@ const SocketAuthority = require('./SocketAuthority')
 const User = require('./objects/user/User')
 const { getId } = require('./utils/index')
 
+const uuidv4 = require("uuid").v4
+
 const Database = require('./Database')
 
 
@@ -92,8 +94,8 @@ class Auth {
     })
   }
 
-  generateRandomPasswordHash() {
-    return this.hashPass(getId())
+  async generateRandomPasswordHash() {
+    return await this.hashPass(getId())
   }
 
   generateAccessToken(payload) {
@@ -209,16 +211,18 @@ class Auth {
       return false
     }
 
-    let user = this.users.find(u => u.username.toLowerCase() === username.toLowerCase())
+    Logger.info(`[Auth] User login ${username}`)
+
+    let user = await Database.userModel.getUserByUsername(username.toLowerCase())
 
     // If the user doesn't exist and PROXY_FORWARD AUTH_CREATE is enabled, create the user
     if (!user && global.ForwardAuth.CreateUser) {
       Logger.debug(`[Auth] Forward Auth User not found with username "${username}" - creating it`)
 
       const newUserData = {
-        id: getId('usr'),
+        id: uuidv4(),
         username,
-        pash: this.generateRandomPasswordHash(), // Random password will need to be reset by admin if wanting to use regular login
+        pash: await this.generateRandomPasswordHash(), // Random password will need to be reset by admin if wanting to use regular login
         createdAt: Date.now(),
         type: 'user'
       }
@@ -226,7 +230,7 @@ class Auth {
 
       user = new User(newUserData)
 
-      const success = await this.db.insertEntity('user', user)
+      const success = await Database.createUser(user)
       if (!success) {
         Logger.error(`[Auth] Forward Auth failed to insert new user in DB`, user.toJSON())
         return false

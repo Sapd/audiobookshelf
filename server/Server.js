@@ -9,10 +9,6 @@ const rateLimit = require('./libs/expressRateLimit')
 const { version } = require('../package.json')
 
 // Utils
-const dbMigration = require('./utils/dbMigration')
-const filePerms = require('./utils/filePerms')
-const { parseBool } = require('./utils/parseBool')
-
 const fileUtils = require('./utils/fileUtils')
 const Logger = require('./Logger')
 
@@ -50,9 +46,9 @@ class Server {
     global.MetadataPath = fileUtils.filePathToPOSIX(Path.normalize(METADATA_PATH))
     global.RouterBasePath = ROUTER_BASE_PATH
     global.ForwardAuth = {
-      Enabled: parseBool(process.env.PROXY_FORWARD_AUTH_ENABLED) && process.env.PROXY_FORWARD_AUTH_USERNAME,
+      Enabled: process.env.PROXY_FORWARD_AUTH_ENABLED && process.env.PROXY_FORWARD_AUTH_USERNAME,
       UsernameHeader: (process.env.PROXY_FORWARD_AUTH_USERNAME || '').toLowerCase(),
-      CreateUser: parseBool(process.env.PROXY_FORWARD_AUTH_CREATE),
+      CreateUser: process.env.PROXY_FORWARD_AUTH_CREATE,
       LogoutURI: process.env.PROXY_FORWARD_AUTH_LOGOUT_URI
     }
 

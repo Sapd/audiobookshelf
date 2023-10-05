@@ -501,7 +501,7 @@ function migrateUsers(oldUsers) {
     const User = {
       id: uuidv4(),
       username: oldUser.username,
-      pash: oldUser.pash || null,
+      pash: (typeof oldUser.pash === 'string' || myVar instanceof String) ? oldUser.pash : null,
       type: oldUser.type || null,
       token: oldUser.token || null,
       isActive: !!oldUser.isActive,
